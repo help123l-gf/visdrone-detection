@@ -1,16 +1,14 @@
 <template>
-  <div class="main-layout">
-    <aside class="sidebar">
-      <slot name="sidebar"></slot>
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <slot name="sidebar" />
     </aside>
-
-    <div class="main-container">
-      <header class="header">
-        <slot name="header"></slot>
+    <div class="app-main">
+      <header class="app-header">
+        <slot name="header" />
       </header>
-
-      <main class="content">
-        <slot name="content"></slot>
+      <main class="app-content">
+        <slot name="content" />
       </main>
     </div>
   </div>
@@ -19,41 +17,43 @@
 <script setup></script>
 
 <style scoped>
-.main-layout {
+.app-shell {
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
 
-.sidebar {
-  width: 200px;
-  background-color: #ffffff;
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-}
-
-.main-container {
-  flex: 1;
+.app-sidebar {
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.header {
-  height: 64px;
-  background-color: #ffffff;
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-header {
+  height: var(--header-height);
+  background: var(--header-bg);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
-.content {
+.app-content {
   flex: 1;
-  padding: 24px 32px;
-  overflow-y: auto;
-  background-color: #f0f7f2;
+  background: var(--content-bg);
+  overflow: auto;
 }
 </style>

@@ -1,152 +1,69 @@
 <template>
-  <div class="forgot-container">
-    <div class="forgot-card">
-      <div class="forgot-header">
-        <div class="logo-icon">
-          <el-icon :size="40" color="#27ae60"><Lock /></el-icon>
+  <div class="auth-page">
+    <div class="auth-bg"><div class="bg-grid"></div></div>
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
         </div>
-        <h1 class="forgot-title">找回密码</h1>
-        <p class="forgot-subtitle">输入您的注册邮箱，我们将发送重置链接</p>
+        <h1>找回密码</h1>
+        <p>输入注册邮箱，我们将发送重置链接</p>
       </div>
 
-      <el-form
-        ref="forgotFormRef"
-        :model="forgotForm"
-        :rules="forgotRules"
-        class="forgot-form"
-      >
+      <el-form ref="formRef" :model="form" :rules="rules" size="large">
         <el-form-item prop="email">
-          <el-input
-            v-model="forgotForm.email"
-            type="email"
-            placeholder="请输入注册邮箱"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><Message /></el-icon>
-            </template>
-          </el-input>
+          <el-input v-model="form.email" placeholder="注册邮箱"><template #prefix><el-icon><Message /></el-icon></template></el-input>
         </el-form-item>
-
         <el-form-item>
-          <el-button type="primary" size="large" class="submit-btn" @click="handleSubmit">
-            发送重置链接
-          </el-button>
+          <el-button type="primary" class="auth-btn" :loading="loading" @click="handleSubmit">发送重置链接</el-button>
         </el-form-item>
       </el-form>
-
-      <div class="back-link">
-        <span>想起密码了？</span>
-        <router-link to="/login">返回登录</router-link>
-      </div>
+      <div class="auth-footer"><span>想起密码了？</span><router-link to="/login">返回登录</router-link></div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive } from "vue";
-import { Lock, Message } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
+import { Message, Lock } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 
 const router = useRouter();
-
-const forgotForm = reactive({
-  email: "",
-});
-
-const forgotRules = {
-  email: [
-    { required: true, message: "请输入邮箱", trigger: "blur" },
-    { type: "email", message: "请输入正确的邮箱格式", trigger: "blur" },
-  ],
-};
-
-const forgotFormRef = ref(null);
+const loading = ref(false);
+const formRef = ref(null);
+const form = reactive({ email: "" });
+const rules = { email: [{ required: true, message: "请输入邮箱", trigger: "blur" }] };
 
 const handleSubmit = () => {
-  forgotFormRef.value.validate((valid) => {
+  formRef.value?.validate((valid) => {
     if (valid) {
-      console.log("找回密码请求:", forgotForm.email);
-      ElMessage.success("重置链接已发送到您的邮箱");
+      loading.value = true;
       setTimeout(() => {
+        ElMessage.success("重置链接已发送到您的邮箱");
         router.push("/login");
-      }, 1500);
+        loading.value = false;
+      }, 1200);
     }
   });
 };
 </script>
 
 <style scoped>
-.forgot-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-}
+.auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; background: linear-gradient(135deg, #0c1419 0%, #1a2d3d 50%, #0f1923 100%); }
+.auth-bg { position: absolute; inset: 0; overflow: hidden; }
+.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 60px 60px; animation: grid-drift 20s linear infinite; }
+@keyframes grid-drift { from { transform: translate(0,0); } to { transform: translate(60px,60px); } }
 
-.forgot-card {
-  width: 100%;
-  max-width: 400px;
-  padding: 40px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.forgot-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.logo-icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 16px;
-  background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.forgot-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 6px;
-}
-
-.forgot-subtitle {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.forgot-form {
-  margin-bottom: 24px;
-}
-
-.submit-btn {
-  width: 100%;
-  height: 44px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.back-link {
-  text-align: center;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.back-link a {
-  color: #27ae60;
-  margin-left: 4px;
-}
-
-.back-link a:hover {
-  text-decoration: underline;
-}
+.auth-card { position: relative; z-index: 1; width: 420px; padding: 36px 40px 28px; background: rgba(255,255,255,0.97); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.3); }
+.auth-header { text-align: center; margin-bottom: 28px; }
+.auth-logo { width: 48px; height: 48px; margin: 0 auto 12px; background: var(--primary); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.auth-logo svg { width: 24px; height: 24px; }
+.auth-header h1 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.auth-header p { font-size: 12px; color: var(--text-muted); }
+.auth-btn { width: 100%; height: 44px; font-size: 15px; font-weight: 500; letter-spacing: 4px; border-radius: 8px; }
+.auth-footer { text-align: center; font-size: 13px; color: var(--text-secondary); }
+.auth-footer a { margin-left: 4px; }
 </style>

@@ -1,156 +1,125 @@
 <template>
-  <div class="detection-page">
+  <div class="page-container">
     <div class="page-header">
-      <div class="breadcrumb">
-        <span>工作台</span>
-        <span class="separator">›</span>
-        <span class="active">智能检测</span>
-      </div>
-      <h1 class="page-title">上传无人机航拍影像，立即识别多类目标</h1>
-      <p class="page-subtitle">
-        支持行人 / 人群 / 自行车 / 汽车 / 面包车 / 卡车 / 三轮车 / 遮阳三轮车 / 公交车 / 摩托车等目标检测
-      </p>
+      <h1 class="page-title">单图分析</h1>
+      <p class="page-desc">上传无人机航拍图片，获取目标检测结果与交通态势评估报告</p>
     </div>
 
-    <div class="model-selector">
-      <el-select v-model="selectedModel" style="width: 200px">
-        <el-option label="visdrone-v1" value="visdrone-v1" />
-        <el-option label="visdrone-v2" value="visdrone-v2" />
-      </el-select>
-    </div>
-
-    <div class="function-tabs">
-      <div
-        v-for="tab in functionTabs"
-        :key="tab.key"
-        class="function-tab"
-        :class="{ active: activeTab === tab.key }"
-        :data-key="tab.key"
-        @click="handleTabClick(tab.key)"
-      >
-        <input
-          type="file"
-          :accept="tab.accept"
-          :multiple="tab.multiple"
-          class="file-input"
-          @change="handleFileChange($event, tab.key)"
-          @click.stop
-          ref="fileInputs"
-        />
-        <el-icon :size="18" class="tab-icon"><component :is="tab.icon" /></el-icon>
-        <div class="tab-content">
-          <span class="tab-text">{{ tab.name }}</span>
-          <span class="tab-desc">{{ tab.desc }}</span>
+    <!-- Upload zone -->
+    <div class="upload-zone" :class="{ 'has-file': originalImage }" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
+      <input ref="fileInput" type="file" accept="image/*" class="file-hidden" @change="handleFileChange" />
+      <template v-if="!originalImage">
+        <el-icon :size="40"><UploadFilled /></el-icon>
+        <p class="upload-text">点击或拖拽图片到此处上传</p>
+        <p class="upload-hint">支持 JPG / PNG / WEBP，建议分辨率 ≥ 1920×1080</p>
+      </template>
+      <template v-else>
+        <div class="uploaded-info">
+          <el-tag type="success" effect="light" round>已加载图片</el-tag>
+          <el-button type="primary" size="small" plain @click.stop="reupload">重新上传</el-button>
         </div>
+      </template>
+    </div>
+
+    <!-- Model selector bar -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="toolbar-label">检测模型：</span>
+        <el-select v-model="selectedModel" size="small" style="width:160px">
+          <el-option label="visdrone-v1 (YOLO11m)" value="visdrone-v1" />
+          <el-option label="visdrone-v2 (待上线)" value="visdrone-v2" disabled />
+        </el-select>
+        <el-button type="primary" size="small" :loading="isDetecting" :disabled="!originalImage" @click="startDetection">
+          <el-icon><Search /></el-icon>开始检测
+        </el-button>
       </div>
     </div>
 
-    <div class="main-content">
-      <div class="left-panel">
-        <div class="panel-header">
-          <span class="panel-title">检测预览</span>
-          <el-tag type="success" effect="light" class="result-tag">
-            <el-icon class="el-icon--left"><Check /></el-icon>
-            检测完成
+    <!-- Main content: left image + right dashboard -->
+    <div class="detection-layout">
+      <!-- Left: image -->
+      <div class="image-panel card">
+        <div class="card-header">
+          <span class="card-title">检测画面</span>
+          <el-tag v-if="detectionResult" type="success" effect="light" size="small">
+            <el-icon><Check /></el-icon>检测完成
           </el-tag>
         </div>
-
-        <div class="toolbar">
-          <el-button
-            :class="{ active: compareMode === 'side' }"
-            size="small"
-            @click="compareMode = 'side'"
-          >
-            <el-icon><Minus /></el-icon>
-            并排对比
-          </el-button>
-          <el-button
-            :class="{ active: compareMode === 'grid' }"
-            size="small"
-            @click="compareMode = 'grid'"
-          >
-            <el-icon><Grid /></el-icon>
-            栅格对比
-          </el-button>
+        <div class="image-viewer">
+          <img v-if="resultImage" :src="resultImage" alt="检测结果" class="main-image" />
+          <img v-else-if="originalImage" :src="originalImage" alt="原始图片" class="main-image" />
+          <div v-else class="image-placeholder">
+            <el-icon :size="64"><Picture /></el-icon>
+            <p>上传图片后预览</p>
+          </div>
         </div>
-
-        <div class="image-compare">
-          <div class="image-card">
-            <img
-              :src="originalImage"
-              alt="原始图片"
-              class="compare-image"
-            />
-            <div class="image-label">原始图片</div>
-          </div>
-          <div class="image-card">
-            <img
-              :src="resultImage"
-              alt="检测结果"
-              class="compare-image"
-            />
-            <div class="image-label">检测结果</div>
-            <div class="detection-mark" v-if="detectionResult"></div>
-          </div>
+        <div class="image-toggle" v-if="resultImage">
+          <el-radio-group v-model="imageView" size="small">
+            <el-radio-button value="result">检测结果</el-radio-button>
+            <el-radio-button value="original">原图</el-radio-button>
+          </el-radio-group>
         </div>
       </div>
 
-      <div class="right-panel">
-        <div class="info-card">
-          <div class="info-item">
-            <span class="info-label">检测模型</span>
-            <span class="info-value">{{ selectedModel }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">模型版本</span>
-            <span class="info-value">v1.0.0</span>
-          </div>
-        </div>
-
-        <div class="result-card">
-          <div class="card-header">
-            <el-icon><List /></el-icon>
-            <span class="card-title">识别清单</span>
-          </div>
-          <div v-if="!detectionResult || detectionResult.total_objects === 0" class="empty-state">
-            <el-icon class="empty-icon"><CircleCheck /></el-icon>
-            <p class="empty-text">未检测到目标</p>
-            <p class="empty-desc">影像无异常目标</p>
-          </div>
-          <div v-else class="detection-list">
-            <div
-              v-for="(box, index) in detectionResult.boxes"
-              :key="index"
-              class="detection-item"
-            >
-              <span class="item-name">{{ box.class_name }}</span>
-              <span class="item-confidence">{{ (box.confidence * 100).toFixed(1) }}%</span>
+      <!-- Right: dashboard -->
+      <div class="dashboard">
+        <!-- Congestion rating -->
+        <div class="card congestion-card" :class="congestionClass">
+          <div class="congestion-badge">
+            <span class="congestion-icon">{{ congestionIcon }}</span>
+            <div>
+              <div class="congestion-level">{{ congestionLabel }}</div>
+              <div class="congestion-desc" v-if="detectionResult">
+                检测到 {{ totalVehicles }} 辆车
+              </div>
+              <div class="congestion-desc" v-else>等待检测</div>
             </div>
           </div>
         </div>
 
-        <div class="result-card">
+        <!-- Category stats -->
+        <div class="card">
           <div class="card-header">
-            <el-icon><ChatDotRound /></el-icon>
-            <span class="card-title">AI 诊断建议</span>
+            <span class="card-title">分类统计</span>
           </div>
-          <div class="diagnosis-content">
-            <p v-if="!detectionResult">未检测到指定目标</p>
-            <p v-else>
-              检测到 {{ detectionResult.total_objects }} 个目标，耗时 {{ detectionResult.detection_time }}s。
-              模型: {{ detectionResult.model_name }}。基于无人机航拍视角的目标检测结果。
-            </p>
+          <div class="stats-grid">
+            <div v-for="cat in vehicleCategories" :key="cat.key" class="stat-item">
+              <div class="stat-num" :style="{ color: cat.color }">{{ cat.count }}</div>
+              <div class="stat-name">{{ cat.label }}</div>
+            </div>
           </div>
+          <div v-if="!detectionResult" class="empty-inline">上传图片并点击检测</div>
         </div>
 
-        <div class="action-buttons">
-          <el-button size="default" class="btn-secondary" @click="handleRedetect">
-            <el-icon><Refresh /></el-icon>
-            重新检测
-          </el-button>
-          <el-button type="primary" size="default" class="btn-primary">
-            查看完整报告
-          </el-button>
+        <!-- Detection list -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">识别清单</span>
+            <span v-if="detectionResult" class="card-count">共 {{ detectionResult.total_objects }} 项</span>
+          </div>
+          <div v-if="detectionResult && detectionResult.boxes.length > 0" class="object-list">
+            <div v-for="(box, i) in detectionResult.boxes.slice(0, 10)" :key="i" class="object-row">
+              <span class="obj-name">{{ box.class_name }}</span>
+              <el-progress :percentage="Math.round(box.confidence * 100)" :stroke-width="6" :show-text="false" class="obj-bar" />
+              <span class="obj-conf">{{ (box.confidence * 100).toFixed(0) }}%</span>
+            </div>
+            <div v-if="detectionResult.boxes.length > 10" class="list-more">
+              还有 {{ detectionResult.boxes.length - 10 }} 个目标...
+            </div>
+          </div>
+          <div v-else class="empty-inline">暂无检测数据</div>
+        </div>
+
+        <!-- Detection info -->
+        <div class="card" v-if="detectionResult">
+          <div class="info-row">
+            <span class="info-label">检测耗时</span>
+            <span class="info-val">{{ detectionResult.detection_time }}s</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">模型版本</span>
+            <span class="info-val">{{ detectionResult.model_name }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -158,470 +127,207 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { ElMessage, ElLoading } from "element-plus";
-import {
-  Picture,
-  Plus,
-  Folder,
-  Monitor,
-  Check,
-  Grid,
-  List,
-  CircleCheck,
-  ChatDotRound,
-  Refresh,
-  Minus,
-} from "@element-plus/icons-vue";
+import { UploadFilled, Picture, Search, Check } from "@element-plus/icons-vue";
 import { detectSingleImage } from "../api/detection";
 
 const selectedModel = ref("visdrone-v1");
-const activeTab = ref("single");
-const compareMode = ref("side");
+const fileInput = ref(null);
 const originalImage = ref("");
 const resultImage = ref("");
 const detectionResult = ref(null);
 const isDetecting = ref(false);
+const imageView = ref("result");
 
-const functionTabs = [
-  {
-    key: "single",
-    name: "单图检测",
-    desc: "快速识别一张图片",
-    icon: Picture,
-    accept: "image/*",
-    multiple: false,
-  },
-  {
-    key: "batch",
-    name: "批量检测",
-    desc: "一次处理多张图片",
-    icon: Plus,
-    accept: "image/*",
-    multiple: true,
-  },
-  {
-    key: "folder",
-    name: "文件夹",
-    desc: "上传整个文件夹",
-    icon: Folder,
-    accept: "image/*",
-    multiple: true,
-  },
-  {
-    key: "video",
-    name: "视频检测",
-    desc: "上传视频自动分析",
-    icon: Monitor,
-    accept: "video/*",
-    multiple: false,
-  },
-];
+// Vehicle categories for stats
+const vehicleCategories = computed(() => {
+  const cats = [
+    { key: "car", label: "汽车", color: "#3b82f6" },
+    { key: "van", label: "面包车", color: "#8b5cf6" },
+    { key: "truck", label: "卡车", color: "#f59e0b" },
+    { key: "bus", label: "公交车", color: "#ef4444" },
+  ];
+  if (!detectionResult.value) return cats.map(c => ({ ...c, count: 0 }));
 
-const fileInputs = ref([]);
+  return cats.map(c => ({
+    ...c,
+    count: detectionResult.value.boxes.filter(b =>
+      b.class_name === c.key ||
+      (c.key === "car" && ["car", "motor"].includes(b.class_name))
+    ).length,
+  }));
+});
 
-const handleTabClick = (key) => {
-  activeTab.value = key;
-  const input = document.querySelector(`.function-tab[data-key="${key}"] .file-input`);
-  if (input) {
-    input.click();
-  }
+const totalVehicles = computed(() => {
+  return vehicleCategories.value.reduce((s, c) => s + c.count, 0);
+});
+
+const congestionClass = computed(() => {
+  if (!detectionResult.value) return "";
+  const n = totalVehicles.value;
+  if (n > 20) return "congested";
+  if (n >= 10) return "slow";
+  if (n > 0) return "clear";
+  return "";
+});
+
+const congestionLabel = computed(() => {
+  if (!detectionResult.value) return "就绪";
+  const n = totalVehicles.value;
+  if (n > 20) return "严重拥堵";
+  if (n >= 10) return "交通缓行";
+  if (n > 0) return "道路畅通";
+  return "无车辆";
+});
+
+const congestionIcon = computed(() => {
+  if (!detectionResult.value) return "—";
+  const n = totalVehicles.value;
+  if (n > 20) return "🚨";
+  if (n >= 10) return "⚠️";
+  return "✅";
+});
+
+const triggerUpload = () => fileInput.value?.click();
+const reupload = () => { fileInput.value?.click(); };
+
+const handleDrop = (e) => {
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
 };
 
-const handleFileChange = async (event, tabKey) => {
-  event.stopPropagation();
-  event.preventDefault();
-  const files = event.target.files;
-  if (files && files.length > 0) {
-    if (tabKey === "single") {
-      await performSingleDetection(files[0]);
-    }
-  }
-  setTimeout(() => {
-    event.target.value = '';
-  }, 0);
+const handleFileChange = (e) => {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+  e.target.value = "";
 };
 
-const performSingleDetection = async (file) => {
-  const loading = ElLoading.service({
-    lock: true,
-    text: "正在检测中...",
-    background: "rgba(0, 0, 0, 0.7)",
-  });
+const processFile = (file) => {
+  if (!file.type.startsWith("image/")) {
+    ElMessage.warning("请上传图片文件");
+    return;
+  }
+  originalImage.value = URL.createObjectURL(file);
+  resultImage.value = "";
+  detectionResult.value = null;
+  // Store file for detection
+  fileInput.value._pendingFile = file;
+};
+
+const startDetection = async () => {
+  const file = fileInput.value?._pendingFile;
+  if (!file) return;
+
+  isDetecting.value = true;
+  const loading = ElLoading.service({ lock: true, text: "正在分析中...", background: "rgba(0,0,0,0.6)" });
 
   try {
-    isDetecting.value = true;
-
     const formData = new FormData();
     formData.append("file", file);
     formData.append("model_name", selectedModel.value);
 
-    originalImage.value = URL.createObjectURL(file);
-
-    const response = await detectSingleImage(formData);
-    if (response.success && response.data) {
-      detectionResult.value = response.data;
-      resultImage.value = "http://localhost:8000" + response.data.result_image_url;
-      ElMessage.success("检测成功！");
+    const res = await detectSingleImage(formData);
+    if (res.success && res.data) {
+      detectionResult.value = res.data;
+      resultImage.value = "http://localhost:8000" + res.data.result_image_url;
+      imageView.value = "result";
+      ElMessage.success(`检测完成，发现 ${res.data.total_objects} 个目标`);
     } else {
-      ElMessage.error(response.message || "检测失败");
+      ElMessage.error(res.message || "检测失败");
     }
-  } catch (error) {
-    console.error("检测错误:", error);
-    ElMessage.error("检测失败，请稍后重试");
+  } catch (e) {
+    ElMessage.error("检测请求失败，请检查后端是否运行");
   } finally {
     isDetecting.value = false;
     loading.close();
   }
 };
-
-const handleRedetect = () => {
-  const input = document.querySelector(`.function-tab[data-key="single"] .file-input`);
-  if (input) {
-    input.click();
-  }
-};
 </script>
 
 <style scoped>
-.detection-page {
-  width: 100%;
-  position: relative;
-}
+.page-container { padding: 24px; height: 100%; overflow-y: auto; }
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 20px; font-weight: 600; }
+.page-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
-.page-header {
-  margin-bottom: 32px;
-  padding-top: 0;
-}
-
-.breadcrumb {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-}
-
-.separator {
-  margin: 0 6px;
-}
-
-.active {
-  color: var(--text-primary);
-}
-
-.page-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.model-selector {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 10;
-}
-
-.function-tabs {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.function-tab {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  padding: 16px 20px;
-  background-color: #ffffff;
-  border-radius: 12px;
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
   cursor: pointer;
   transition: all 0.2s;
-  border: 2px solid transparent;
-  position: relative;
-  overflow: hidden;
-}
-
-.file-input {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  z-index: 10;
-}
-
-.function-tab:hover {
-  background-color: var(--primary-light);
-}
-
-.function-tab.active {
-  background-color: var(--primary-light);
-  border-color: var(--primary-color);
-}
-
-.tab-icon {
-  font-size: 18px;
-  color: var(--primary-color);
-  margin-right: 12px;
-  flex-shrink: 0;
-}
-
-.tab-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.tab-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
-}
-
-.tab-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.main-content {
-  display: flex;
-  gap: 24px;
-}
-
-.left-panel {
-  flex: 1;
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   margin-bottom: 16px;
+  background: #fff;
 }
+.upload-zone:hover { border-color: var(--primary); background: var(--primary-bg); }
+.upload-zone.has-file { padding: 16px 24px; border-style: solid; border-color: var(--primary); }
+.upload-text { font-size: 15px; font-weight: 500; margin-top: 12px; }
+.upload-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.uploaded-info { display: flex; align-items: center; justify-content: space-between; }
+.file-hidden { display: none; }
 
-.panel-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
+/* Toolbar */
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.toolbar-left { display: flex; align-items: center; gap: 12px; }
+.toolbar-label { font-size: 13px; color: var(--text-secondary); }
 
-.result-tag {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 13px;
-}
+/* Layout */
+.detection-layout { display: flex; gap: 20px; }
+.image-panel { flex: 1; min-width: 0; }
+.dashboard { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
 
-.toolbar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.toolbar .el-button {
-  border-radius: 6px;
-  padding: 6px 14px;
-}
-
-.toolbar .el-button.active {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.image-compare {
-  display: flex;
-  gap: 16px;
-  height: 320px;
-}
-
-.image-card {
-  flex: 1;
-  position: relative;
+/* Image viewer */
+.image-viewer {
+  aspect-ratio: 16/10;
+  background: #1a1a2e;
   border-radius: 8px;
   overflow: hidden;
-  background-color: #f9fafb;
-}
-
-.compare-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.image-label {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #ffffff;
-  font-size: 13px;
-}
-
-.detection-mark {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.main-image { width: 100%; height: 100%; object-fit: contain; }
+.image-placeholder { text-align: center; color: #4a5568; }
+.image-placeholder p { margin-top: 12px; font-size: 13px; }
+.image-toggle { margin-top: 12px; text-align: center; }
 
-.detection-mark::after {
-  content: "✓";
-  color: #ffffff;
-  font-size: 18px;
-  font-weight: bold;
-}
+/* Cards */
+.card { background: #fff; border-radius: 10px; box-shadow: var(--card-shadow); padding: 18px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 14px; font-weight: 600; }
+.card-count { font-size: 12px; color: var(--text-muted); }
 
-.right-panel {
-  width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+/* Congestion card */
+.congestion-card { text-align: center; padding: 24px; }
+.congestion-card.clear { background: var(--traffic-bg-clear); border: 1px solid rgba(34,197,94,.3); }
+.congestion-card.slow { background: var(--traffic-bg-slow); border: 1px solid rgba(245,158,11,.3); }
+.congestion-card.congested { background: var(--traffic-bg-congested); border: 1px solid rgba(239,68,68,.3); }
+.congestion-badge { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.congestion-icon { font-size: 32px; }
+.congestion-level { font-size: 18px; font-weight: 700; }
+.congestion-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
-.info-card {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 16px;
-}
+/* Stats grid */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stat-item { text-align: center; padding: 10px 4px; background: #f9fafb; border-radius: 8px; }
+.stat-num { font-size: 24px; font-weight: 700; }
+.stat-name { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-color);
-}
+/* Object list */
+.object-list { display: flex; flex-direction: column; gap: 8px; }
+.object-row { display: flex; align-items: center; gap: 10px; }
+.obj-name { width: 72px; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.obj-bar { flex: 1; }
+.obj-conf { font-size: 12px; color: var(--text-secondary); width: 32px; text-align: right; }
+.list-more { font-size: 12px; color: var(--text-muted); text-align: center; }
 
-.info-item:last-child {
-  border-bottom: none;
-}
+/* Info rows */
+.info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+.info-label { color: var(--text-secondary); }
+.info-val { font-weight: 500; }
 
-.info-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.info-value {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.result-card {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.card-header .el-icon {
-  font-size: 16px;
-  color: var(--primary-color);
-  margin-right: 8px;
-}
-
-.card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px 0;
-}
-
-.empty-icon {
-  font-size: 48px;
-  color: var(--success-color);
-  margin-bottom: 12px;
-}
-
-.empty-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.empty-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.detection-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.detection-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background-color: var(--primary-light);
-  border-radius: 6px;
-}
-
-.item-name {
-  font-size: 13px;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.item-confidence {
-  font-size: 13px;
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.diagnosis-content {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.btn-secondary {
-  flex: 1;
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 14px;
-}
-
-.btn-primary {
-  flex: 2;
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 14px;
-}
+.empty-inline { text-align: center; font-size: 12px; color: var(--text-muted); padding: 24px 0; }
 </style>

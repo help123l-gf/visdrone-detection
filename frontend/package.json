@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "axios": "^1.7.2",
+    "echarts": "^6.1.0",
     "element-plus": "^2.7.6",
     "pinia": "^3.0.4",
     "unplugin-auto-import": "^0.17.6",
     "unplugin-vue-components": "^0.27.0",
     "vue": "^3.5.34",
+    "vue-echarts": "^8.0.1",
     "vue-router": "^4.4.0"
   },
   "devDependencies": {

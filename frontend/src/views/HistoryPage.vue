@@ -1,487 +1,142 @@
 <template>
-  <div class="history-page">
+  <div class="page-container">
     <div class="page-header">
-      <h1 class="page-title">检测历史记录</h1>
-      <p class="page-subtitle">查看和管理无人机视觉检测的所有记录</p>
+      <h1 class="page-title">历史台账</h1>
+      <p class="page-desc">查看和管理所有历史检测记录，支持按类型、日期、拥堵评级筛选</p>
     </div>
 
-    <div class="search-bar">
-      <el-input
-        v-model="searchQuery"
-        placeholder="搜索检测记录..."
-        size="default"
-        class="search-input"
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
-
-      <el-select
-        v-model="filterStatus"
-        placeholder="状态筛选"
-        size="default"
-        class="filter-select"
-      >
-        <el-option label="全部" value="" />
-        <el-option label="检测完成" value="completed" />
-        <el-option label="检测中" value="processing" />
-        <el-option label="失败" value="failed" />
-      </el-select>
-
-      <el-select
-        v-model="filterType"
-        placeholder="类型筛选"
-        size="default"
-        class="filter-select"
-      >
-        <el-option label="全部" value="" />
-        <el-option label="单图检测" value="single" />
-        <el-option label="批量检测" value="batch" />
-        <el-option label="文件夹" value="folder" />
-        <el-option label="视频检测" value="video" />
-      </el-select>
-    </div>
-
-    <div class="history-list">
-      <div
-        v-for="record in filteredRecords"
-        :key="record.id"
-        class="history-card"
-        @click="viewRecord(record)"
-      >
-        <div class="record-preview">
-          <img
-            :src="record.image"
-            :alt="record.filename"
-            class="preview-image"
-          />
-          <div
-            class="status-badge"
-            :class="record.status"
-          >
-            <el-icon><component :is="getStatusIcon(record.status)" /></el-icon>
-            {{ getStatusText(record.status) }}
-          </div>
-        </div>
-
-        <div class="record-info">
-          <div class="record-header">
-            <span class="record-filename">{{ record.filename }}</span>
-            <span class="record-type">{{ getTypeText(record.type) }}</span>
-          </div>
-          <div class="record-meta">
-            <span class="meta-item">
-              <el-icon><Clock /></el-icon>
-              {{ record.time }}
-            </span>
-            <span class="meta-item">
-              <el-icon><Picture /></el-icon>
-              {{ record.count }} 张图片
-            </span>
-            <span class="meta-item">
-              <el-icon><Aim /></el-icon>
-              {{ record.targets }} 个目标
-            </span>
-          </div>
-          <div class="record-tags">
-            <span
-              v-for="tag in record.detectedTargets"
-              :key="tag"
-              class="detected-tag"
-            >
-              {{ tag }}
-            </span>
-          </div>
-        </div>
-
-        <div class="record-actions">
-          <el-button size="small" @click.stop="viewRecord(record)">
-            <el-icon><Monitor/></el-icon>
-            查看
-          </el-button>
-          <el-button size="small" @click.stop="downloadRecord(record)">
-            <el-icon><Download/></el-icon>
-            下载
-          </el-button>
-          <el-button
-            size="small"
-            type="danger"
-            @click.stop="deleteRecord(record)"
-          >
-            <el-icon><Delete/></el-icon>
-            删除
-          </el-button>
-        </div>
+    <!-- Filters -->
+    <div class="filter-bar card">
+      <div class="filter-row">
+        <el-input v-model="query.keyword" placeholder="搜索文件名..." size="default" style="width:220px" clearable>
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-select v-model="query.type" placeholder="检测类型" size="default" style="width:140px" clearable>
+          <el-option label="全部" value="" />
+          <el-option label="单图分析" value="single" />
+          <el-option label="批量归档" value="batch" />
+          <el-option label="视频分析" value="video" />
+          <el-option label="实时监控" value="monitor" />
+        </el-select>
+        <el-select v-model="query.congestion" placeholder="拥堵评级" size="default" style="width:140px" clearable>
+          <el-option label="全部" value="" />
+          <el-option label="严重拥堵" value="high" />
+          <el-option label="交通缓行" value="medium" />
+          <el-option label="道路畅通" value="low" />
+        </el-select>
+        <el-date-picker v-model="query.dateRange" type="daterange" range-separator="至"
+          start-placeholder="开始日期" end-placeholder="结束日期" size="default" style="width:260px" />
+        <el-button type="primary" size="default" @click="fetchRecords">
+          <el-icon><Search /></el-icon>查询
+        </el-button>
+        <el-button size="default" @click="resetQuery">重置</el-button>
       </div>
     </div>
 
-    <div v-if="filteredRecords.length === 0" class="empty-state">
-      <el-icon :size="64" class="empty-icon"><Folder /></el-icon>
-      <p class="empty-text">暂无检测记录</p>
-      <el-button type="primary" @click="goToDetection">
-        <el-icon><Plus /></el-icon>
-        开始检测
-      </el-button>
-    </div>
+    <!-- Data table -->
+    <div class="card table-card">
+      <el-table :data="records" stripe style="width:100%" v-loading="loading" empty-text="暂无检测记录">
+        <el-table-column prop="detection_time" label="检测时间" width="170" sortable />
+        <el-table-column prop="type" label="检测类型" width="110">
+          <template #default="{ row }">
+            <el-tag :type="typeTag(row.type)" size="small" effect="light">{{ typeLabel(row.type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="filename" label="文件名" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="model_name" label="模型" width="120" />
+        <el-table-column prop="max_objects" label="最大目标数" width="110" sortable align="center" />
+        <el-table-column prop="congestion" label="拥堵评级" width="110">
+          <template #default="{ row }">
+            <el-tag :type="congestionTag(row.congestion)" size="small" effect="dark">
+              {{ row.congestion }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="detection_time_sec" label="耗时(s)" width="90" align="center" />
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default>
+            <el-button type="primary" link size="small">查看详情</el-button>
+            <el-button type="danger" link size="small">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <div class="pagination-wrapper">
-      <el-pagination
-        v-if="totalRecords > 0"
-        :total="totalRecords"
-        :page-size="pageSize"
-        :current-page="currentPage"
-        @current-change="handlePageChange"
-        layout="prev, pager, next"
-      />
+      <div class="table-footer">
+        <el-pagination v-model:current-page="query.page" v-model:page-size="query.pageSize"
+          :total="total" :page-sizes="[10,20,50]" layout="total, sizes, prev, pager, next" size="default" />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
-import { useRouter } from "vue-router";
-import {
-  Search,
-  Clock,
-  Picture,
-  Aim,
-  Monitor,
-  Download,
-  Delete,
-  Plus,
-  Folder,
-  CircleCheck,
-  Loading,
-  CircleClose,
-} from "@element-plus/icons-vue";
+import { ref, reactive } from "vue";
+import { Search } from "@element-plus/icons-vue";
 
-const router = useRouter();
+const loading = ref(false);
+const records = ref([]);
+const total = ref(0);
 
-const searchQuery = ref("");
-const filterStatus = ref("");
-const filterType = ref("");
-const currentPage = ref(1);
-const pageSize = ref(10);
-
-const historyRecords = ref([
-  {
-    id: 1,
-    filename: "street_view_20241201.jpg",
-    image: "https://picsum.photos/seed/street/400/300",
-    type: "single",
-    status: "completed",
-    time: "2024-12-01 14:30",
-    count: 1,
-    targets: 3,
-    detectedTargets: ["行人", "汽车", "面包车"],
-  },
-  {
-    id: 2,
-    filename: "traffic_batch.zip",
-    image: "https://picsum.photos/seed/traffic/400/300",
-    type: "batch",
-    status: "completed",
-    time: "2024-12-01 10:15",
-    count: 15,
-    targets: 28,
-    detectedTargets: ["公交车", "卡车", "汽车"],
-  },
-  {
-    id: 3,
-    filename: "city_street",
-    image: "https://picsum.photos/seed/streets/400/300",
-    type: "folder",
-    status: "processing",
-    time: "2024-11-30 16:45",
-    count: 50,
-    targets: 0,
-    detectedTargets: [],
-  },
-  {
-    id: 4,
-    filename: "drone_video.mp4",
-    image: "https://picsum.photos/seed/drone/400/300",
-    type: "video",
-    status: "completed",
-    time: "2024-11-30 09:20",
-    count: 1,
-    targets: 156,
-    detectedTargets: ["汽车", "卡车", "三轮车"],
-  },
-  {
-    id: 5,
-    filename: "parking_lot.jpg",
-    image: "https://picsum.photos/seed/parking/400/300",
-    type: "single",
-    status: "failed",
-    time: "2024-11-29 11:00",
-    count: 1,
-    targets: 0,
-    detectedTargets: [],
-  },
-  {
-    id: 6,
-    filename: "street_crossing.jpg",
-    image: "https://picsum.photos/seed/crossing/400/300",
-    type: "single",
-    status: "completed",
-    time: "2024-11-28 15:30",
-    count: 1,
-    targets: 5,
-    detectedTargets: ["摩托车", "自行车", "行人"],
-  },
-]);
-
-const filteredRecords = computed(() => {
-  return historyRecords.value.filter((record) => {
-    const matchesSearch =
-      !searchQuery.value ||
-      record.filename.toLowerCase().includes(searchQuery.value.toLowerCase());
-    const matchesStatus = !filterStatus.value || record.status === filterStatus.value;
-    const matchesType = !filterType.value || record.type === filterType.value;
-    return matchesSearch && matchesStatus && matchesType;
-  });
+const query = reactive({
+  keyword: "",
+  type: "",
+  congestion: "",
+  dateRange: null,
+  page: 1,
+  pageSize: 10,
 });
 
-const totalRecords = computed(() => filteredRecords.value.length);
+const typeTag = (t) => ({ single: "success", batch: "warning", video: "primary", monitor: "danger" }[t] || "info");
+const typeLabel = (t) => ({ single: "单图分析", batch: "批量归档", video: "视频分析", monitor: "实时监控" }[t] || t);
 
-const getStatusIcon = (status) => {
-  const icons = {
-    completed: CircleCheck,
-    processing: Loading,
-    failed: CircleClose,
-  };
-  return icons[status] || CircleCheck;
+const congestionTag = (c) => {
+  if (c && c.includes("严重")) return "danger";
+  if (c && c.includes("缓行")) return "warning";
+  return "success";
 };
 
-const getStatusText = (status) => {
-  const texts = {
-    completed: "检测完成",
-    processing: "检测中",
-    failed: "失败",
-  };
-  return texts[status] || status;
+const fetchRecords = async () => {
+  loading.value = true;
+  // TODO: 接入 GET /api/detection/history?keyword=&type=&page=&pageSize=
+  // 当前返回模拟数据供开发调试
+  setTimeout(() => {
+    records.value = [
+      { detection_time: "2026-05-21 10:30:15", type: "single", filename: "street_view_A12.jpg", model_name: "visdrone-v1", max_objects: 8, congestion: "道路畅通", detection_time_sec: 0.58 },
+      { detection_time: "2026-05-20 15:22:08", type: "batch", filename: "downtown_pack.zip", model_name: "visdrone-v1", max_objects: 34, congestion: "严重拥堵", detection_time_sec: 12.4 },
+      { detection_time: "2026-05-19 09:15:42", type: "video", filename: "highway_01.mp4", model_name: "visdrone-v1", max_objects: 22, congestion: "交通缓行", detection_time_sec: 45.2 },
+      { detection_time: "2026-05-18 14:08:33", type: "monitor", filename: "cam_intersection", model_name: "visdrone-v1", max_objects: 15, congestion: "道路畅通", detection_time_sec: 0 },
+      { detection_time: "2026-05-17 11:45:01", type: "single", filename: "parking_lot_v2.jpg", model_name: "visdrone-v1", max_objects: 41, congestion: "严重拥堵", detection_time_sec: 0.72 },
+    ];
+    total.value = 5;
+    loading.value = false;
+  }, 300);
+  // TODO End
 };
 
-const getTypeText = (type) => {
-  const texts = {
-    single: "单图检测",
-    batch: "批量检测",
-    folder: "文件夹",
-    video: "视频检测",
-  };
-  return texts[type] || type;
+const resetQuery = () => {
+  query.keyword = "";
+  query.type = "";
+  query.congestion = "";
+  query.dateRange = null;
+  query.page = 1;
+  fetchRecords();
 };
 
-const viewRecord = (record) => {
-  console.log("查看记录:", record);
-};
-
-const downloadRecord = (record) => {
-  console.log("下载记录:", record);
-};
-
-const deleteRecord = (record) => {
-  if (confirm(`确定要删除记录 "${record.filename}" 吗？`)) {
-    const index = historyRecords.value.findIndex((r) => r.id === record.id);
-    if (index > -1) {
-      historyRecords.value.splice(index, 1);
-    }
-  }
-};
-
-const goToDetection = () => {
-  router.push("/detection");
-};
-
-const handlePageChange = (page) => {
-  currentPage.value = page;
-};
+fetchRecords();
 </script>
 
-<style scoped lang="scss">
-.history-page {
-  width: 100%;
+<style scoped>
+.page-container { padding: 24px; height: 100%; overflow-y: auto; }
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 20px; font-weight: 600; }
+.page-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
-  .page-header {
-    margin-bottom: 24px;
+.card { background: #fff; border-radius: 10px; box-shadow: var(--card-shadow); padding: 18px; }
 
-    .page-title {
-      font-size: 24px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin-bottom: 8px;
-    }
+.filter-bar { margin-bottom: 16px; }
+.filter-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
-    .page-subtitle {
-      font-size: 14px;
-      color: var(--text-secondary);
-    }
-  }
-
-  .search-bar {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
-    align-items: center;
-
-    .search-input {
-      flex: 1;
-      max-width: 300px;
-    }
-
-    .filter-select {
-      width: 140px;
-    }
-  }
-
-  .history-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .history-card {
-    background-color: #ffffff;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: var(--card-shadow);
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover {
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-      transform: translateY(-2px);
-    }
-
-    .record-preview {
-      position: relative;
-      width: 120px;
-      height: 80px;
-      border-radius: 8px;
-      overflow: hidden;
-
-      .preview-image {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      .status-badge {
-        position: absolute;
-        bottom: 8px;
-        left: 8px;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-size: 12px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-
-        &.completed {
-          background-color: rgba(34, 197, 94, 0.9);
-          color: white;
-        }
-
-        &.processing {
-          background-color: rgba(59, 130, 246, 0.9);
-          color: white;
-        }
-
-        &.failed {
-          background-color: rgba(239, 68, 68, 0.9);
-          color: white;
-        }
-      }
-    }
-
-    .record-info {
-      flex: 1;
-      min-width: 0;
-
-      .record-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 10px;
-
-        .record-filename {
-          font-size: 15px;
-          font-weight: 500;
-          color: var(--text-primary);
-        }
-
-        .record-type {
-          padding: 3px 8px;
-          background-color: #f3f4f6;
-          border-radius: 4px;
-          font-size: 12px;
-          color: var(--text-secondary);
-        }
-      }
-
-      .record-meta {
-        display: flex;
-        gap: 20px;
-        margin-bottom: 10px;
-
-        .meta-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 13px;
-          color: var(--text-secondary);
-        }
-      }
-
-      .record-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-
-        .detected-tag {
-          padding: 3px 8px;
-          background-color: rgba(39, 174, 96, 0.1);
-          color: #27ae60;
-          border-radius: 4px;
-          font-size: 12px;
-        }
-      }
-    }
-
-    .record-actions {
-      display: flex;
-      gap: 8px;
-    }
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 0;
-
-    .empty-icon {
-      color: #9ca3af;
-      margin-bottom: 16px;
-    }
-
-    .empty-text {
-      font-size: 15px;
-      color: var(--text-secondary);
-      margin-bottom: 24px;
-    }
-  }
-
-  .pagination-wrapper {
-    display: flex;
-    justify-content: center;
-    margin-top: 32px;
-  }
-}
+.table-card { padding: 0; }
+.table-card .el-table { --el-table-header-bg-color: #f8fafc; }
+.table-footer { display: flex; justify-content: flex-end; padding: 16px 18px; border-top: 1px solid var(--border-color); }
 </style>

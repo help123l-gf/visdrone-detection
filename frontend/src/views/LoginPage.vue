@@ -1,58 +1,50 @@
 <template>
-  <div class="login-container">
+  <div class="login-page">
+    <div class="login-bg">
+      <div class="bg-grid"></div>
+    </div>
+
     <div class="login-card">
       <div class="login-header">
-        <div class="logo-icon">
-          <el-icon :size="40" color="#27ae60"><Picture /></el-icon>
+        <div class="login-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
         </div>
-        <h1 class="login-title">无人机视觉检测平台</h1>
-        <p class="login-subtitle">VisDrone · 精准目标检测</p>
+        <h1>无人机交通态势感知系统</h1>
+        <p>VisDrone · Intelligent Traffic Situation Awareness</p>
       </div>
 
-      <el-form
-        ref="loginFormRef"
-        :model="loginForm"
-        :rules="loginRules"
-        class="login-form"
-      >
+      <el-form ref="formRef" :model="form" :rules="rules" size="large">
         <el-form-item prop="username">
-          <el-input
-            v-model="loginForm.username"
-            placeholder="请输入用户名"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><User /></el-icon>
-            </template>
+          <el-input v-model="form.username" placeholder="用户名">
+            <template #prefix><el-icon><User /></el-icon></template>
           </el-input>
         </el-form-item>
 
         <el-form-item prop="password">
-          <el-input
-            v-model="loginForm.password"
-            type="password"
-            placeholder="请输入密码"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><Lock /></el-icon>
-            </template>
+          <el-input v-model="form.password" type="password" placeholder="密码" @keyup.enter="handleLogin">
+            <template #prefix><el-icon><Lock /></el-icon></template>
           </el-input>
         </el-form-item>
 
-        <el-form-item class="form-actions">
-          <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
-          <router-link to="/forgot-password" class="forgot-password">忘记密码?</router-link>
+        <el-form-item>
+          <div class="form-extra">
+            <el-checkbox v-model="form.remember">记住我</el-checkbox>
+            <router-link to="/forgot-password">忘记密码？</router-link>
+          </div>
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" size="large" class="login-btn" @click="handleLogin">
-            登录
+          <el-button type="primary" class="login-btn" :loading="loading" @click="handleLogin">
+            登 录 系 统
           </el-button>
         </el-form-item>
       </el-form>
 
-      <div class="register-link">
+      <div class="login-footer">
         <span>还没有账号？</span>
         <router-link to="/register">立即注册</router-link>
       </div>
@@ -62,129 +54,127 @@
 
 <script setup>
 import { ref, reactive } from "vue";
-import { Picture, User, Lock } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
+import { User, Lock } from "@element-plus/icons-vue";
 
 const router = useRouter();
+const loading = ref(false);
+const formRef = ref(null);
 
-const loginForm = reactive({
+const form = reactive({
   username: "",
   password: "",
   remember: false,
 });
 
-const loginRules = {
-  username: [
-    { required: true, message: "请输入用户名", trigger: "blur" },
-    { min: 3, max: 20, message: "用户名长度在3到20个字符", trigger: "blur" },
-  ],
-  password: [
-    { required: true, message: "请输入密码", trigger: "blur" },
-    { min: 6, max: 30, message: "密码长度在6到30个字符", trigger: "blur" },
-  ],
+const rules = {
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
 };
 
-const loginFormRef = ref(null);
-
 const handleLogin = () => {
-  loginFormRef.value.validate((valid) => {
+  formRef.value?.validate((valid) => {
     if (valid) {
-      console.log("登录请求:", loginForm);
-      localStorage.setItem("token", "mock-token");
-      router.push("/detection");
+      loading.value = true;
+      setTimeout(() => {
+        localStorage.setItem("token", "authenticated");
+        router.push("/detection");
+        loading.value = false;
+      }, 600);
     }
   });
 };
 </script>
 
 <style scoped>
-.login-container {
+.login-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0c1419 0%, #1a2d3d 50%, #0f1923 100%);
+}
+
+.login-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: grid-drift 20s linear infinite;
+}
+@keyframes grid-drift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(60px, 60px); }
 }
 
 .login-card {
-  width: 100%;
-  max-width: 400px;
-  padding: 40px;
-  background: #ffffff;
+  position: relative;
+  z-index: 1;
+  width: 420px;
+  padding: 44px 40px 36px;
+  background: rgba(255,255,255,0.97);
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.3);
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
-
-.logo-icon {
-  width: 60px;
-  height: 60px;
+.login-logo {
+  width: 56px;
+  height: 56px;
   margin: 0 auto 16px;
-  background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-  border-radius: 12px;
+  background: var(--primary);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #fff;
 }
-
-.login-title {
-  font-size: 22px;
+.login-logo svg { width: 28px; height: 28px; }
+.login-header h1 {
+  font-size: 19px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 6px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.login-header p {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
 }
 
-.login-subtitle {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.login-form {
-  margin-bottom: 24px;
-}
-
-.form-actions {
+.form-extra {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  width: 100%;
 }
-
-.forgot-password {
-  font-size: 13px;
-  color: #27ae60;
-  cursor: pointer;
-}
-
-.forgot-password:hover {
-  text-decoration: underline;
-}
+.form-extra a { font-size: 13px; }
 
 .login-btn {
   width: 100%;
   height: 44px;
-  border-radius: 8px;
   font-size: 15px;
   font-weight: 500;
+  letter-spacing: 2px;
+  border-radius: 8px;
 }
 
-.register-link {
+.login-footer {
   text-align: center;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
-
-.register-link a {
-  color: #27ae60;
-  margin-left: 4px;
-  cursor: pointer;
-}
-
-.register-link a:hover {
-  text-decoration: underline;
-}
+.login-footer a { margin-left: 4px; }
 </style>

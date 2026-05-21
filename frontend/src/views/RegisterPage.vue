@@ -1,251 +1,92 @@
 <template>
-  <div class="register-container">
-    <div class="register-card">
-      <div class="register-header">
-        <div class="logo-icon">
-          <el-icon :size="40" color="#27ae60"><UserFilled /></el-icon>
+  <div class="auth-page">
+    <div class="auth-bg"><div class="bg-grid"></div></div>
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
         </div>
-        <h1 class="register-title">创建账号</h1>
-        <p class="register-subtitle">加入我们，开始无人机视觉检测之旅</p>
+        <h1>创建账号</h1>
+        <p>加入无人机交通态势感知系统</p>
       </div>
 
-      <el-form
-        ref="registerFormRef"
-        :model="registerForm"
-        :rules="registerRules"
-        class="register-form"
-      >
+      <el-form ref="formRef" :model="form" :rules="rules" size="large">
         <el-form-item prop="username">
-          <el-input
-            v-model="registerForm.username"
-            placeholder="请输入用户名"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><User /></el-icon>
-            </template>
-          </el-input>
+          <el-input v-model="form.username" placeholder="用户名"><template #prefix><el-icon><User /></el-icon></template></el-input>
         </el-form-item>
-
         <el-form-item prop="email">
-          <el-input
-            v-model="registerForm.email"
-            type="email"
-            placeholder="请输入邮箱"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><Message /></el-icon>
-            </template>
-          </el-input>
+          <el-input v-model="form.email" placeholder="邮箱"><template #prefix><el-icon><Message /></el-icon></template></el-input>
         </el-form-item>
-
         <el-form-item prop="password">
-          <el-input
-            v-model="registerForm.password"
-            type="password"
-            placeholder="请输入密码"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><Lock /></el-icon>
-            </template>
-          </el-input>
+          <el-input v-model="form.password" type="password" placeholder="密码"><template #prefix><el-icon><Lock /></el-icon></template></el-input>
         </el-form-item>
-
-        <el-form-item prop="confirmPassword">
-          <el-input
-            v-model="registerForm.confirmPassword"
-            type="password"
-            placeholder="请确认密码"
-            size="large"
-          >
-            <template #prefix>
-              <el-icon><Lock /></el-icon>
-            </template>
-          </el-input>
+        <el-form-item prop="confirm">
+          <el-input v-model="form.confirm" type="password" placeholder="确认密码"><template #prefix><el-icon><Lock /></el-icon></template></el-input>
         </el-form-item>
-
-        <el-form-item class="agree-terms">
-          <el-checkbox v-model="registerForm.agree" />
-          <span>我已阅读并同意</span>
-          <a href="#" class="terms-link">《服务条款》</a>
-          <span>和</span>
-          <a href="#" class="terms-link">《隐私政策》</a>
-        </el-form-item>
-
         <el-form-item>
-          <el-button type="primary" size="large" class="register-btn" @click="handleRegister">
-            注册
-          </el-button>
+          <el-checkbox v-model="form.agree"><span class="terms">我已阅读并同意《服务条款》和《隐私政策》</span></el-checkbox>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" class="auth-btn" :loading="loading" @click="handleRegister">注 册</el-button>
         </el-form-item>
       </el-form>
-
-      <div class="login-link">
-        <span>已有账号？</span>
-        <router-link to="/login">立即登录</router-link>
-      </div>
+      <div class="auth-footer"><span>已有账号？</span><router-link to="/login">立即登录</router-link></div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive } from "vue";
-import { UserFilled, User, Message, Lock } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
+import { User, Message, Lock } from "@element-plus/icons-vue";
 
 const router = useRouter();
+const loading = ref(false);
+const formRef = ref(null);
+const form = reactive({ username: "", email: "", password: "", confirm: "", agree: false });
 
-const registerForm = reactive({
-  username: "",
-  email: "",
-  password: "",
-  confirmPassword: "",
-  agree: false,
-});
-
-const registerRules = {
-  username: [
-    { required: true, message: "请输入用户名", trigger: "blur" },
-    { min: 3, max: 20, message: "用户名长度在3到20个字符", trigger: "blur" },
-    { pattern: /^[a-zA-Z0-9_]+$/, message: "用户名只能包含字母、数字和下划线", trigger: "blur" },
-  ],
-  email: [
-    { required: true, message: "请输入邮箱", trigger: "blur" },
-    { type: "email", message: "请输入正确的邮箱格式", trigger: "blur" },
-  ],
-  password: [
-    { required: true, message: "请输入密码", trigger: "blur" },
-    { min: 6, max: 30, message: "密码长度在6到30个字符", trigger: "blur" },
-    { pattern: /^(?=.*[a-zA-Z])(?=.*\d)/, message: "密码需包含字母和数字", trigger: "blur" },
-  ],
-  confirmPassword: [
-    { required: true, message: "请确认密码", trigger: "blur" },
-    {
-      validator: (rule, value, callback) => {
-        if (value !== registerForm.password) {
-          callback(new Error("两次输入的密码不一致"));
-        } else {
-          callback();
-        }
-      },
-      trigger: "blur",
-    },
-  ],
-  agree: [
-    {
-      validator: (rule, value, callback) => {
-        if (!value) {
-          callback(new Error("请同意服务条款和隐私政策"));
-        } else {
-          callback();
-        }
-      },
-      trigger: "change",
-    },
-  ],
+const validateConfirm = (_rule, value, cb) => {
+  if (value !== form.password) cb(new Error("两次输入的密码不一致"));
+  else cb();
 };
 
-const registerFormRef = ref(null);
+const rules = {
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }, { min: 3, max: 20, message: "长度3-20字符", trigger: "blur" }],
+  email: [{ required: true, message: "请输入邮箱", trigger: "blur" }, { type: "email", message: "邮箱格式不正确", trigger: "blur" }],
+  password: [{ required: true, message: "请输入密码", trigger: "blur" }, { min: 6, message: "密码至少6位", trigger: "blur" }],
+  confirm: [{ required: true, message: "请确认密码", trigger: "blur" }, { validator: validateConfirm, trigger: "blur" }],
+};
 
 const handleRegister = () => {
-  registerFormRef.value.validate((valid) => {
+  formRef.value?.validate((valid) => {
     if (valid) {
-      console.log("注册请求:", registerForm);
-      localStorage.setItem("token", "mock-token");
-      router.push("/detection");
+      loading.value = true;
+      setTimeout(() => {
+        localStorage.setItem("token", "authenticated");
+        router.push("/detection");
+        loading.value = false;
+      }, 600);
     }
   });
 };
 </script>
 
 <style scoped>
-.register-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-}
+.auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; background: linear-gradient(135deg, #0c1419 0%, #1a2d3d 50%, #0f1923 100%); }
+.auth-bg { position: absolute; inset: 0; overflow: hidden; }
+.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 60px 60px; animation: grid-drift 20s linear infinite; }
+@keyframes grid-drift { from { transform: translate(0,0); } to { transform: translate(60px,60px); } }
 
-.register-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 40px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.register-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.logo-icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 16px;
-  background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.register-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 6px;
-}
-
-.register-subtitle {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.register-form {
-  margin-bottom: 24px;
-}
-
-.agree-terms {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: #6b7280;
-  margin-bottom: 16px;
-}
-
-.terms-link {
-  color: #27ae60;
-  margin: 0 4px;
-}
-
-.terms-link:hover {
-  text-decoration: underline;
-}
-
-.register-btn {
-  width: 100%;
-  height: 44px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.login-link {
-  text-align: center;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.login-link a {
-  color: #27ae60;
-  margin-left: 4px;
-}
-
-.login-link a:hover {
-  text-decoration: underline;
-}
+.auth-card { position: relative; z-index: 1; width: 420px; padding: 36px 40px 28px; background: rgba(255,255,255,0.97); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.3); }
+.auth-header { text-align: center; margin-bottom: 28px; }
+.auth-logo { width: 48px; height: 48px; margin: 0 auto 12px; background: var(--primary); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.auth-logo svg { width: 24px; height: 24px; }
+.auth-header h1 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.auth-header p { font-size: 12px; color: var(--text-muted); }
+.auth-btn { width: 100%; height: 44px; font-size: 15px; font-weight: 500; letter-spacing: 4px; border-radius: 8px; }
+.auth-footer { text-align: center; font-size: 13px; color: var(--text-secondary); }
+.auth-footer a { margin-left: 4px; }
+.terms { font-size: 12px; color: var(--text-secondary); }
 </style>
