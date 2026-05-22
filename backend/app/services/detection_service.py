@@ -2,8 +2,8 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import List
 
+import torch
 from PIL import Image
 from ultralytics import YOLO
 
@@ -15,6 +15,7 @@ from app.utils.file_utils import get_file_url
 class DetectionService:
     def __init__(self):
         self.model = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.class_names = {}
         self._load_model()
         self._init_class_names()
@@ -22,6 +23,7 @@ class DetectionService:
     def _load_model(self):
         if os.path.exists(settings.YOLO_MODEL_PATH):
             self.model = YOLO(settings.YOLO_MODEL_PATH)
+            self.model.to(self.device)
         else:
             raise FileNotFoundError(f"Model file not found: {settings.YOLO_MODEL_PATH}")
 
@@ -47,6 +49,7 @@ class DetectionService:
             source=image_path,
             conf=settings.CONFIDENCE_THRESHOLD,
             iou=settings.IOU_THRESHOLD,
+            device=self.device,
             save=False
         )
 
