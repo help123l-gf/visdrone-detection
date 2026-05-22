@@ -5,11 +5,14 @@ from app.utils.file_utils import save_upload_file, ensure_directories
 from app.config import settings
 from app.models.schemas import (
     SingleDetectionResponse,
+    BatchDetectionResponse,
+    BatchDetectionData,
     HistoryResponse,
     TargetListResponse,
     TargetItem,
     HistoryItem,
 )
+from typing import List
 from datetime import datetime
 
 router = APIRouter(prefix="/detection", tags=["detection"])
@@ -35,6 +38,28 @@ async def detect_single_image(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"检测失败: {str(e)}")
+
+
+@router.post("/batch", response_model=BatchDetectionResponse)
+async def detect_batch_images(
+    files: list[UploadFile] = File(...),
+    model_name: str = Form("visdrone-v1"),
+):
+    try:
+        paths = []
+        for file in files:
+            filename = await save_upload_file(file, settings.UPLOAD_DIR)
+            paths.append(os.path.join(settings.UPLOAD_DIR, filename))
+
+        data = detection_service.detect_batch_images(paths, model_name)
+
+        return BatchDetectionResponse(
+            success=True,
+            message=f"批量检测完成，{data['total_images']} 张图片，共 {data['total_objects']} 个目标",
+            data=BatchDetectionData(**data),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批量检测失败: {str(e)}")
 
 
 @router.get("/targets/list", response_model=TargetListResponse)

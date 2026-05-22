@@ -57,3 +57,40 @@ class TargetListResponse(BaseModel):
     success: bool
     message: str
     data: List[TargetItem]
+
+
+class BatchImageResult(BaseModel):
+    filename: str
+    image_url: str
+    result_image_url: str
+    total_objects: int
+    detection_time: float
+    boxes: List[DetectionBox]
+
+
+class CategoryDistribution(BaseModel):
+    class_name: str
+    chinese_name: str
+    count: int
+
+
+class PeakImage(BaseModel):
+    filename: str
+    total_objects: int
+    congestion_level: str
+
+
+class BatchDetectionData(BaseModel):
+    batch_id: str
+    total_images: int
+    total_objects: int
+    total_time: float
+    category_distribution: List[CategoryDistribution]
+    peak_image: Optional[PeakImage] = None
+    results: List[BatchImageResult]
+
+
+class BatchDetectionResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[BatchDetectionData] = None

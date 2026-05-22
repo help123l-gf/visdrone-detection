@@ -94,4 +94,65 @@ class DetectionService:
         )
 
 
+    def detect_batch_images(self, image_paths: list, model_name: str = "visdrone-v1"):
+        from app.models.schemas import BatchImageResult, CategoryDistribution, PeakImage
+
+        batch_start = time.time()
+        batch_id = str(uuid.uuid4())
+        results = []
+        category_counts = {}
+        peak = None
+        peak_count = 0
+
+        for i, path in enumerate(image_paths):
+            r = self.detect_single_image(path, model_name)
+            filename = os.path.basename(path)
+            results.append(BatchImageResult(
+                filename=filename,
+                image_url=get_file_url(filename, "static/uploads"),
+                result_image_url=r.result_image_url,
+                total_objects=r.total_objects,
+                detection_time=r.detection_time,
+                boxes=r.boxes,
+            ))
+
+            for b in r.boxes:
+                category_counts[b.class_name] = category_counts.get(b.class_name, 0) + 1
+
+            if r.total_objects > peak_count:
+                peak_count = r.total_objects
+                level = "道路畅通"
+                if peak_count > 20:
+                    level = "严重拥堵"
+                elif peak_count >= 10:
+                    level = "交通缓行"
+                peak = PeakImage(filename=filename, total_objects=peak_count, congestion_level=level)
+
+        total_objects = sum(category_counts.values())
+        distribution = [
+            CategoryDistribution(
+                class_name=name,
+                chinese_name=self.class_names.get(self._name_to_id(name), name),
+                count=count,
+            )
+            for name, count in sorted(category_counts.items(), key=lambda x: -x[1])
+        ]
+
+        return {
+            "batch_id": batch_id,
+            "total_images": len(results),
+            "total_objects": total_objects,
+            "total_time": round(time.time() - batch_start, 3),
+            "category_distribution": distribution,
+            "peak_image": peak,
+            "results": results,
+        }
+
+    def _name_to_id(self, name: str) -> int:
+        for k, v in self.class_names.items():
+            if v == name:
+                return k
+        return -1
+
+
 detection_service = DetectionService()
