@@ -94,3 +94,44 @@ class BatchDetectionResponse(BaseModel):
     success: bool
     message: str
     data: Optional[BatchDetectionData] = None
+
+
+class VideoBox(BaseModel):
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    class_name: str
+
+
+class VideoFrameData(BaseModel):
+    frame_index: int
+    timestamp_sec: float
+    total_objects: int
+    category_counts: dict  # {class_name: count}
+    boxes: List[VideoBox]
+
+
+class VideoPeakFrame(BaseModel):
+    frame_index: int
+    timestamp_sec: float
+    total_objects: int
+
+
+class VideoDetectionData(BaseModel):
+    video_id: str
+    video_url: str
+    total_frames: int
+    processed_frames: int
+    duration_sec: float
+    fps: float
+    annotated_video_url: Optional[str] = None
+    frame_data: List[VideoFrameData]
+    peak_frame: Optional[VideoPeakFrame] = None
+    avg_objects_per_frame: float
+
+
+class VideoDetectionResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[VideoDetectionData] = None

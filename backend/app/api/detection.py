@@ -7,6 +7,8 @@ from app.models.schemas import (
     SingleDetectionResponse,
     BatchDetectionResponse,
     BatchDetectionData,
+    VideoDetectionResponse,
+    VideoDetectionData,
     HistoryResponse,
     TargetListResponse,
     TargetItem,
@@ -60,6 +62,27 @@ async def detect_batch_images(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"批量检测失败: {str(e)}")
+
+
+@router.post("/video", response_model=VideoDetectionResponse)
+async def detect_video(
+    file: UploadFile = File(...),
+    model_name: str = Form("visdrone-v1"),
+    frame_interval: int = Form(5),
+):
+    try:
+        filename = await save_upload_file(file, settings.UPLOAD_DIR)
+        video_path = os.path.join(settings.UPLOAD_DIR, filename)
+
+        data = detection_service.detect_video(video_path, model_name, frame_interval)
+
+        return VideoDetectionResponse(
+            success=True,
+            message=f"视频分析完成，{data['processed_frames']} 帧，平均 {data['avg_objects_per_frame']} 个目标/帧",
+            data=VideoDetectionData(**data),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"视频分析失败: {str(e)}")
 
 
 @router.get("/targets/list", response_model=TargetListResponse)

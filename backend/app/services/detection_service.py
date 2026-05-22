@@ -1,8 +1,12 @@
 import os
 import time
 import uuid
+from collections import Counter
 from datetime import datetime
 
+import cv2
+import imageio
+import numpy as np
 import torch
 from PIL import Image
 from ultralytics import YOLO
@@ -146,6 +150,112 @@ class DetectionService:
             "category_distribution": distribution,
             "peak_image": peak,
             "results": results,
+        }
+
+    def detect_video(self, video_path: str, model_name: str = "visdrone-v1", frame_interval: int = 5):
+        from app.models.schemas import VideoFrameData, VideoPeakFrame, VideoBox
+
+        video_id = str(uuid.uuid4())
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            raise ValueError(f"Cannot open video: {video_path}")
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Prepare imageio video writer (H.264, browser-compatible)
+        video_filename = f"video_{video_id[:8]}.mp4"
+        video_path_out = os.path.join(settings.RESULT_DIR, video_filename)
+        out_fps = fps / max(frame_interval, 1)
+        writer = imageio.get_writer(
+            video_path_out, format="FFMPEG", mode="I",
+            fps=out_fps, codec="libx264", pixelformat="yuv420p",
+            quality=8, macro_block_size=1,
+        )
+
+        frame_data = []
+        peak = None
+        peak_count = 0
+        frame_idx = 0
+        processed = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_idx % frame_interval != 0:
+                frame_idx += 1
+                continue
+
+            processed += 1
+            timestamp = frame_idx / fps
+
+            # YOLO inference
+            results = self.model.predict(
+                source=frame, conf=settings.CONFIDENCE_THRESHOLD,
+                iou=settings.IOU_THRESHOLD, device=self.device,
+                save=False, verbose=False,
+            )
+
+            boxes_list = []
+            cat_counts = Counter()
+            for r in results:
+                for b in r.boxes:
+                    cls_name = self.class_names.get(int(b.cls[0]), "unknown")
+                    cat_counts[cls_name] += 1
+                    boxes_list.append(VideoBox(
+                        x1=float(b.xyxy[0][0]), y1=float(b.xyxy[0][1]),
+                        x2=float(b.xyxy[0][2]), y2=float(b.xyxy[0][3]),
+                        class_name=cls_name,
+                    ))
+
+            total = sum(cat_counts.values())
+            frame_data.append(VideoFrameData(
+                frame_index=frame_idx,
+                timestamp_sec=round(timestamp, 2),
+                total_objects=total,
+                category_counts=dict(cat_counts),
+                boxes=boxes_list,
+            ))
+
+            if total > peak_count:
+                peak_count = total
+                peak = VideoPeakFrame(
+                    frame_index=frame_idx,
+                    timestamp_sec=round(timestamp, 2),
+                    total_objects=total,
+                )
+
+            # Generate annotated frame and write to video
+            annotated = results[0].plot() if len(results) > 0 and results[0].boxes is not None else frame
+            annotated_rgb = annotated[..., ::-1]  # BGR -> RGB for imageio
+            writer.append_data(annotated_rgb)
+
+            frame_idx += 1
+
+        cap.release()
+        writer.close()
+
+        avg_objects = sum(f.total_objects for f in frame_data) / processed if processed > 0 else 0
+        duration = total_frames / fps
+
+        annotated_url = get_file_url(video_filename, "static/results") if processed > 0 else None
+
+        return {
+            "video_id": video_id,
+            "video_url": get_file_url(os.path.basename(video_path), "static/uploads"),
+            "total_frames": total_frames,
+            "processed_frames": processed,
+            "duration_sec": round(duration, 1),
+            "fps": round(fps, 1),
+            "annotated_video_url": annotated_url,
+            "frame_data": frame_data,
+            "peak_frame": peak,
+            "avg_objects_per_frame": round(avg_objects, 1),
         }
 
     def _name_to_id(self, name: str) -> int:
