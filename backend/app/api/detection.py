@@ -1,5 +1,11 @@
+import json
 import os
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from collections import Counter
+
+import cv2
+import numpy as np
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
+
 from app.services.detection_service import detection_service
 from app.utils.file_utils import save_upload_file, ensure_directories
 from app.config import settings
@@ -114,3 +120,70 @@ async def get_detection_history():
         data=[],
         total=0
     )
+
+
+ALERT_THRESHOLD = 15
+
+@router.websocket("/ws/monitor")
+async def monitor_websocket(websocket: WebSocket, model_name: str = "coco"):
+    await websocket.accept()
+    service = detection_service
+    model, class_names = service.get_model(model_name)
+
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+
+            # Decode JPEG
+            nparr = np.frombuffer(data, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+
+            # Resize for speed (max 640px wide)
+            h, w = frame.shape[:2]
+            if w > 640:
+                scale = 640 / w
+                frame = cv2.resize(frame, (640, int(h * scale)))
+
+            # YOLO inference
+            results = model.predict(
+                source=frame,
+                conf=settings.CONFIDENCE_THRESHOLD,
+                iou=settings.IOU_THRESHOLD,
+                device=service.device,
+                save=False,
+                verbose=False,
+            )
+
+            boxes = []
+            cat_counts = Counter()
+            for r in results:
+                for b in r.boxes:
+                    cls_name = class_names.get(int(b.cls[0]), "unknown")
+                    cat_counts[cls_name] += 1
+                    boxes.append({
+                        "x1": float(b.xyxy[0][0]),
+                        "y1": float(b.xyxy[0][1]),
+                        "x2": float(b.xyxy[0][2]),
+                        "y2": float(b.xyxy[0][3]),
+                        "confidence": float(b.conf[0]),
+                        "class_name": cls_name,
+                    })
+
+            total = sum(cat_counts.values())
+
+            await websocket.send_json({
+                "success": True,
+                "boxes": boxes,
+                "total_objects": total,
+                "alert": total >= ALERT_THRESHOLD,
+                "category_counts": dict(cat_counts),
+                "frame_w": frame.shape[1],
+                "frame_h": frame.shape[0],
+            })
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass

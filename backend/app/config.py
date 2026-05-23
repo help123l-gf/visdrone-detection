@@ -16,6 +16,7 @@ class Settings(BaseModel):
     RESULT_DIR: str = "static/results"
 
     YOLO_MODEL_PATH: str = "yolo11m_visdrone.pt"
+    COCO_MODEL_PATH: str = "yolo11n.pt"
     CONFIDENCE_THRESHOLD: float = 0.5
     IOU_THRESHOLD: float = 0.45
 

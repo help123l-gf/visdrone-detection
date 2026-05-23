@@ -18,38 +18,74 @@ from app.utils.file_utils import get_file_url
 
 class DetectionService:
     def __init__(self):
-        self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.models = {}
         self.class_names = {}
-        self._load_model()
-        self._init_class_names()
+        self._load_all_models()
 
-    def _load_model(self):
+    def _load_all_models(self):
+        """Load VisDrone model (main) + COCO nano model (webcam demo)."""
+        # VisDrone (main)
         if os.path.exists(settings.YOLO_MODEL_PATH):
-            self.model = YOLO(settings.YOLO_MODEL_PATH)
-            self.model.to(self.device)
+            m = YOLO(settings.YOLO_MODEL_PATH)
+            m.to(self.device)
+            self.models["visdrone-v1"] = m
+            self.models["visdrone-v2"] = m  # alias for future
         else:
-            raise FileNotFoundError(f"Model file not found: {settings.YOLO_MODEL_PATH}")
+            raise FileNotFoundError(f"VisDrone model not found: {settings.YOLO_MODEL_PATH}")
 
-    def _init_class_names(self):
+        # COCO nano (webcam/general demo)
+        coco_path = settings.COCO_MODEL_PATH
+        if os.path.exists(coco_path):
+            m = YOLO(coco_path)
+            m.to(self.device)
+            self.models["coco"] = m
+        else:
+            print(f"Warning: COCO model not found at {coco_path}, skipping")
+
         self.class_names = {
-            0: "pedestrian",
-            1: "people",
-            2: "bicycle",
-            3: "car",
-            4: "van",
-            5: "truck",
-            6: "tricycle",
-            7: "awning-tricycle",
-            8: "bus",
-            9: "motor",
+            "visdrone-v1": {
+                0: "pedestrian", 1: "people", 2: "bicycle", 3: "car", 4: "van",
+                5: "truck", 6: "tricycle", 7: "awning-tricycle", 8: "bus", 9: "motor",
+            },
+            "visdrone-v2": {
+                0: "pedestrian", 1: "people", 2: "bicycle", 3: "car", 4: "van",
+                5: "truck", 6: "tricycle", 7: "awning-tricycle", 8: "bus", 9: "motor",
+            },
+            "coco": {
+                0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane",
+                5: "bus", 6: "train", 7: "truck", 8: "boat", 9: "traffic light",
+                10: "fire hydrant", 11: "stop sign", 12: "parking meter", 13: "bench",
+                14: "bird", 15: "cat", 16: "dog", 17: "horse", 18: "sheep", 19: "cow",
+                20: "elephant", 21: "bear", 22: "zebra", 23: "giraffe", 24: "backpack",
+                25: "umbrella", 26: "handbag", 27: "tie", 28: "suitcase", 29: "frisbee",
+                30: "skis", 31: "snowboard", 32: "sports ball", 33: "kite",
+                34: "baseball bat", 35: "baseball glove", 36: "skateboard",
+                37: "surfboard", 38: "tennis racket", 39: "bottle", 40: "wine glass",
+                41: "cup", 42: "fork", 43: "knife", 44: "spoon", 45: "bowl",
+                46: "banana", 47: "apple", 48: "sandwich", 49: "orange",
+                50: "broccoli", 51: "carrot", 52: "hot dog", 53: "pizza", 54: "donut",
+                55: "cake", 56: "chair", 57: "couch", 58: "potted plant", 59: "bed",
+                60: "dining table", 61: "toilet", 62: "tv", 63: "laptop", 64: "mouse",
+                65: "remote", 66: "keyboard", 67: "cell phone", 68: "microwave",
+                69: "oven", 70: "toaster", 71: "sink", 72: "refrigerator", 73: "book",
+                74: "clock", 75: "vase", 76: "scissors", 77: "teddy bear",
+                78: "hair drier", 79: "toothbrush",
+            },
         }
+
+    def get_model(self, model_name: str):
+        if model_name in self.models:
+            return self.models[model_name], self.class_names.get(model_name, {})
+        return self.models["visdrone-v1"], self.class_names["visdrone-v1"]
 
     def detect_single_image(self, image_path: str, model_name: str = "visdrone-v1") -> DetectionResult:
         start_time = time.time()
         detection_id = str(uuid.uuid4())
 
-        results = self.model.predict(
+        model, class_names = self.get_model(model_name)
+
+        results = model.predict(
             source=image_path,
             conf=settings.CONFIDENCE_THRESHOLD,
             iou=settings.IOU_THRESHOLD,
@@ -63,7 +99,7 @@ class DetectionService:
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 confidence = float(box.conf[0])
                 class_id = int(box.cls[0])
-                class_name = self.class_names.get(class_id, f"class_{class_id}")
+                class_name = class_names.get(class_id, f"class_{class_id}")
 
                 boxes.append(DetectionBox(
                     x1=x1,
@@ -133,10 +169,11 @@ class DetectionService:
                 peak = PeakImage(filename=filename, total_objects=peak_count, congestion_level=level)
 
         total_objects = sum(category_counts.values())
+        _, class_names = self.get_model(model_name)
         distribution = [
             CategoryDistribution(
                 class_name=name,
-                chinese_name=self.class_names.get(self._name_to_id(name), name),
+                chinese_name=class_names.get(self._name_to_id(name, class_names), name),
                 count=count,
             )
             for name, count in sorted(category_counts.items(), key=lambda x: -x[1])
@@ -155,6 +192,7 @@ class DetectionService:
     def detect_video(self, video_path: str, model_name: str = "visdrone-v1", frame_interval: int = 5):
         from app.models.schemas import VideoFrameData, VideoPeakFrame, VideoBox
 
+        model, class_names = self.get_model(model_name)
         video_id = str(uuid.uuid4())
         cap = cv2.VideoCapture(video_path)
 
@@ -195,7 +233,7 @@ class DetectionService:
             timestamp = frame_idx / fps
 
             # YOLO inference
-            results = self.model.predict(
+            results = model.predict(
                 source=frame, conf=settings.CONFIDENCE_THRESHOLD,
                 iou=settings.IOU_THRESHOLD, device=self.device,
                 save=False, verbose=False,
@@ -205,7 +243,7 @@ class DetectionService:
             cat_counts = Counter()
             for r in results:
                 for b in r.boxes:
-                    cls_name = self.class_names.get(int(b.cls[0]), "unknown")
+                    cls_name = class_names.get(int(b.cls[0]), "unknown")
                     cat_counts[cls_name] += 1
                     boxes_list.append(VideoBox(
                         x1=float(b.xyxy[0][0]), y1=float(b.xyxy[0][1]),
@@ -258,8 +296,9 @@ class DetectionService:
             "avg_objects_per_frame": round(avg_objects, 1),
         }
 
-    def _name_to_id(self, name: str) -> int:
-        for k, v in self.class_names.items():
+    def _name_to_id(self, name: str, class_names: dict = None) -> int:
+        names = class_names or self.class_names.get("visdrone-v1", {})
+        for k, v in names.items():
             if v == name:
                 return k
         return -1
