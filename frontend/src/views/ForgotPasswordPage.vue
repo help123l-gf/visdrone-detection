@@ -28,8 +28,9 @@
 <script setup>
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
-import { Message, Lock } from "@element-plus/icons-vue";
+import { Message } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
+import { forgotPassword } from "../api/auth";
 
 const router = useRouter();
 const loading = ref(false);
@@ -37,17 +38,20 @@ const formRef = ref(null);
 const form = reactive({ email: "" });
 const rules = { email: [{ required: true, message: "请输入邮箱", trigger: "blur" }] };
 
-const handleSubmit = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        ElMessage.success("重置链接已发送到您的邮箱");
-        router.push("/login");
-        loading.value = false;
-      }, 1200);
-    }
-  });
+const handleSubmit = async () => {
+  const valid = await formRef.value?.validate().catch(() => false);
+  if (!valid) return;
+
+  loading.value = true;
+  try {
+    const res = await forgotPassword({ email: form.email });
+    ElMessage.success(res.message || "重置链接已发送到您的邮箱");
+    router.push("/login");
+  } catch {
+    // 错误已在 request.js 拦截器中处理
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 

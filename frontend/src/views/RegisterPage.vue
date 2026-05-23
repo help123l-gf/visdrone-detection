@@ -41,6 +41,8 @@
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { User, Message, Lock } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { register } from "../api/auth";
 
 const router = useRouter();
 const loading = ref(false);
@@ -59,17 +61,30 @@ const rules = {
   confirm: [{ required: true, message: "请确认密码", trigger: "blur" }, { validator: validateConfirm, trigger: "blur" }],
 };
 
-const handleRegister = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        localStorage.setItem("token", "authenticated");
-        router.push("/detection");
-        loading.value = false;
-      }, 600);
-    }
-  });
+const handleRegister = async () => {
+  const valid = await formRef.value?.validate().catch(() => false);
+  if (!valid) return;
+  if (!form.agree) {
+    ElMessage.warning("请先阅读并同意服务条款");
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const res = await register({
+      username: form.username,
+      email: form.email,
+      password: form.password,
+    });
+    localStorage.setItem("token", res.token);
+    localStorage.setItem("user", JSON.stringify(res.user));
+    ElMessage.success("注册成功");
+    router.push("/detection");
+  } catch {
+    // 错误已在 request.js 拦截器中处理
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 

@@ -56,6 +56,8 @@
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { User, Lock } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { login } from "../api/auth";
 
 const router = useRouter();
 const loading = ref(false);
@@ -72,17 +74,25 @@ const rules = {
   password: [{ required: true, message: "请输入密码", trigger: "blur" }],
 };
 
-const handleLogin = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        localStorage.setItem("token", "authenticated");
-        router.push("/detection");
-        loading.value = false;
-      }, 600);
-    }
-  });
+const handleLogin = async () => {
+  const valid = await formRef.value?.validate().catch(() => false);
+  if (!valid) return;
+
+  loading.value = true;
+  try {
+    const res = await login({
+      username: form.username,
+      password: form.password,
+    });
+    localStorage.setItem("token", res.token);
+    localStorage.setItem("user", JSON.stringify(res.user));
+    ElMessage.success("登录成功");
+    router.push("/detection");
+  } catch {
+    // 错误已在 request.js 拦截器中处理
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 

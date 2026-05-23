@@ -6,8 +6,13 @@ const service = axios.create({
   timeout: 30000
 })
 
+// 请求拦截器：自动携带 token
 service.interceptors.request.use(
   config => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   error => {
@@ -15,12 +20,22 @@ service.interceptors.request.use(
   }
 )
 
+// 响应拦截器：统一错误处理
 service.interceptors.response.use(
   response => {
     return response.data
   },
   error => {
-    ElMessage.error('请求失败：' + (error.response?.data?.message || '服务器错误'))
+    const msg = error.response?.data?.detail || '服务器错误'
+    ElMessage.error(msg)
+
+    // 401 未登录，跳转到登录页
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+    }
+
     return Promise.reject(error)
   }
 )
