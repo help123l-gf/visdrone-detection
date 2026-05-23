@@ -54,9 +54,9 @@
         </el-table-column>
         <el-table-column prop="detection_time_sec" label="耗时(s)" width="90" align="center" />
         <el-table-column label="操作" width="150" fixed="right">
-          <template #default>
-            <el-button type="primary" link size="small">查看详情</el-button>
-            <el-button type="danger" link size="small">删除</el-button>
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="handleDetail(row)">查看详情</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -70,8 +70,10 @@
 </template>
 
 <script setup>
-import { ref, reactive } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import { Search } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import request from "../utils/request";
 
 const loading = ref(false);
 const records = ref([]);
@@ -97,20 +99,72 @@ const congestionTag = (c) => {
 
 const fetchRecords = async () => {
   loading.value = true;
-  // TODO: 接入 GET /api/detection/history?keyword=&type=&page=&pageSize=
-  // 当前返回模拟数据供开发调试
-  setTimeout(() => {
-    records.value = [
-      { detection_time: "2026-05-21 10:30:15", type: "single", filename: "street_view_A12.jpg", model_name: "visdrone-v1", max_objects: 8, congestion: "道路畅通", detection_time_sec: 0.58 },
-      { detection_time: "2026-05-20 15:22:08", type: "batch", filename: "downtown_pack.zip", model_name: "visdrone-v1", max_objects: 34, congestion: "严重拥堵", detection_time_sec: 12.4 },
-      { detection_time: "2026-05-19 09:15:42", type: "video", filename: "highway_01.mp4", model_name: "visdrone-v1", max_objects: 22, congestion: "交通缓行", detection_time_sec: 45.2 },
-      { detection_time: "2026-05-18 14:08:33", type: "monitor", filename: "cam_intersection", model_name: "visdrone-v1", max_objects: 15, congestion: "道路畅通", detection_time_sec: 0 },
-      { detection_time: "2026-05-17 11:45:01", type: "single", filename: "parking_lot_v2.jpg", model_name: "visdrone-v1", max_objects: 41, congestion: "严重拥堵", detection_time_sec: 0.72 },
-    ];
-    total.value = 5;
+  try {
+    const params = new URLSearchParams();
+    if (query.keyword) params.append("keyword", query.keyword);
+    if (query.type) params.append("type", query.type);
+    if (query.congestion) params.append("congestion", query.congestion);
+    if (query.dateRange && query.dateRange.length === 2) {
+      params.append("startDate", query.dateRange[0].toISOString());
+      params.append("endDate", query.dateRange[1].toISOString());
+    }
+    params.append("page", query.page);
+    params.append("pageSize", query.pageSize);
+
+    const res = await request.get("/detection/history?" + params.toString());
+    records.value = res.data || [];
+    total.value = res.total || 0;
+  } catch (e) {
+    records.value = [];
+    total.value = 0;
+  } finally {
     loading.value = false;
-  }, 300);
-  // TODO End
+  }
+};
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm("确定要删除这条检测记录吗？", "确认删除", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+    });
+    await request.delete(`/detection/history/${row.id}`);
+    ElMessage.success("删除成功");
+    fetchRecords();
+  } catch (e) {
+    if (e !== "cancel") {
+      // error handled by interceptor
+    }
+  }
+};
+
+const handleDetail = async (row) => {
+  try {
+    const res = await request.get(`/detection/detail/${row.id}`);
+    const detail = res.data;
+    if (!detail) return;
+
+    let detailHtml = `
+      <div style="line-height:2;font-size:14px">
+        <p><b>检测时间：</b>${detail.detection_time || ""}</p>
+        <p><b>检测类型：</b>${typeLabel(detail.type)}</p>
+        <p><b>文件名：</b>${detail.filename || "-"}</p>
+        <p><b>模型：</b>${detail.model_name}</p>
+        <p><b>总目标数：</b>${detail.total_objects}</p>
+        <p><b>最大目标数：</b>${detail.max_objects}</p>
+        <p><b>拥堵评级：</b>${detail.congestion}</p>
+        <p><b>耗时：</b>${detail.detection_time_sec}s</p>
+        ${detail.category_summary ? '<p><b>类别统计：</b>' + JSON.stringify(detail.category_summary) + '</p>' : ''}
+      </div>`;
+
+    ElMessageBox.alert(detailHtml, "检测详情", {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: "关闭",
+    });
+  } catch (e) {
+    // handled
+  }
 };
 
 const resetQuery = () => {

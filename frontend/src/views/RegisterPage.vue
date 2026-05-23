@@ -41,6 +41,8 @@
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { User, Message, Lock } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import request from "../utils/request";
 
 const router = useRouter();
 const loading = ref(false);
@@ -59,15 +61,27 @@ const rules = {
   confirm: [{ required: true, message: "请确认密码", trigger: "blur" }, { validator: validateConfirm, trigger: "blur" }],
 };
 
-const handleRegister = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        localStorage.setItem("token", "authenticated");
+const handleRegister = async () => {
+  formRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      const res = await request.post("/auth/register", {
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        nickname: form.username,
+      });
+      if (res.success) {
+        localStorage.setItem("token", res.data.token);
+        localStorage.setItem("user", JSON.stringify(res.data.user));
+        ElMessage.success("注册成功！");
         router.push("/detection");
-        loading.value = false;
-      }, 600);
+      }
+    } catch (e) {
+      // error handled by interceptor
+    } finally {
+      loading.value = false;
     }
   });
 };

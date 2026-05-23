@@ -32,11 +32,17 @@ class SingleDetectionResponse(BaseModel):
 
 class HistoryItem(BaseModel):
     id: str
-    image_url: str
-    result_image_url: str
-    total_objects: int
-    created_at: datetime
-    model_name: str
+    type: str = ""
+    filename: Optional[str] = None
+    image_url: Optional[str] = None
+    result_image_url: Optional[str] = None
+    total_objects: int = 0
+    max_objects: int = 0
+    detection_time_sec: float = 0.0
+    congestion: Optional[str] = None
+    model_name: str = ""
+    detection_time: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class HistoryResponse(BaseModel):
@@ -44,6 +50,23 @@ class HistoryResponse(BaseModel):
     message: str
     data: List[HistoryItem]
     total: int
+
+
+class DetectionDetailResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[dict] = None
+
+
+class DeleteRecordResponse(BaseModel):
+    success: bool
+    message: str
+
+
+class UserStatsResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[dict] = None
 
 
 class TargetItem(BaseModel):

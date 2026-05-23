@@ -4,9 +4,13 @@ from collections import Counter
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect, Depends, Query
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.services.detection_service import detection_service
+from app.services.history_service import create_record, query_records, get_record_detail, delete_record
+from app.services.storage_service import storage_service
 from app.utils.file_utils import save_upload_file, ensure_directories
 from app.config import settings
 from app.models.schemas import (
@@ -16,10 +20,15 @@ from app.models.schemas import (
     VideoDetectionResponse,
     VideoDetectionData,
     HistoryResponse,
+    HistoryItem,
     TargetListResponse,
     TargetItem,
-    HistoryItem,
+    DetectionDetailResponse,
+    DeleteRecordResponse,
+    UserStatsResponse,
 )
+from app.api.deps import get_current_user
+from app.models.db_models import User
 from typing import List
 from datetime import datetime
 
@@ -31,13 +40,45 @@ ensure_directories()
 @router.post("/single", response_model=SingleDetectionResponse)
 async def detect_single_image(
     file: UploadFile = File(...),
-    model_name: str = Form("visdrone-v1")
+    model_name: str = Form("visdrone-v1"),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
 ):
     try:
         filename = await save_upload_file(file, settings.UPLOAD_DIR)
         image_path = os.path.join(settings.UPLOAD_DIR, filename)
 
         result = detection_service.detect_single_image(image_path, model_name)
+
+        # 上传到 MinIO（如果启用）
+        result_key = None
+        if storage_service.enabled:
+            result_path = os.path.join(settings.RESULT_DIR, os.path.basename(result.result_image_url.lstrip("/static/results/")))
+            result_key = storage_service.upload_file(result_path)
+
+        # 计算拥堵评级
+        congestion = _calc_congestion(result.total_objects)
+
+        # 类别统计
+        cat_summary = {}
+        for b in result.boxes:
+            cat_summary[b.class_name] = cat_summary.get(b.class_name, 0) + 1
+
+        # 写入历史记录
+        create_record(
+            db=db,
+            user_id=user.id if user else None,
+            detection_type="single",
+            model_name=model_name,
+            filename=os.path.basename(image_path),
+            total_objects=result.total_objects,
+            max_objects=result.total_objects,
+            detection_time_sec=result.detection_time,
+            congestion_level=congestion,
+            result_image_key=result_key,
+            category_summary=cat_summary,
+            boxes=[b.model_dump() for b in result.boxes],
+        )
 
         return SingleDetectionResponse(
             success=True,
@@ -52,14 +93,41 @@ async def detect_single_image(
 async def detect_batch_images(
     files: list[UploadFile] = File(...),
     model_name: str = Form("visdrone-v1"),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
 ):
     try:
         paths = []
+        filenames = []
         for file in files:
             filename = await save_upload_file(file, settings.UPLOAD_DIR)
             paths.append(os.path.join(settings.UPLOAD_DIR, filename))
+            filenames.append(filename)
 
         data = detection_service.detect_batch_images(paths, model_name)
+
+        # 类别统计汇总
+        cat_summary = {}
+        for d in data["category_distribution"]:
+            cat_summary[d.class_name] = d.count
+
+        peak_count = data["peak_image"].total_objects if data["peak_image"] else 0
+        congestion = _calc_congestion(peak_count)
+
+        # 写入历史记录
+        create_record(
+            db=db,
+            user_id=user.id if user else None,
+            detection_type="batch",
+            model_name=model_name,
+            filename=", ".join(filenames[:3]) + ("..." if len(filenames) > 3 else ""),
+            total_objects=data["total_objects"],
+            max_objects=peak_count,
+            detection_time_sec=data["total_time"],
+            congestion_level=congestion,
+            category_summary=cat_summary,
+            extra_data={"total_images": data["total_images"]},
+        )
 
         return BatchDetectionResponse(
             success=True,
@@ -75,12 +143,42 @@ async def detect_video(
     file: UploadFile = File(...),
     model_name: str = Form("visdrone-v1"),
     frame_interval: int = Form(5),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
 ):
     try:
         filename = await save_upload_file(file, settings.UPLOAD_DIR)
         video_path = os.path.join(settings.UPLOAD_DIR, filename)
 
         data = detection_service.detect_video(video_path, model_name, frame_interval)
+
+        # 上传标注视频到 MinIO
+        if storage_service.enabled and data.get("annotated_video_url"):
+            video_name = os.path.basename(data["annotated_video_url"].lstrip("/static/results/"))
+            video_result_path = os.path.join(settings.RESULT_DIR, video_name)
+            storage_service.upload_file(video_result_path)
+
+        peak_count = data["peak_frame"].total_objects if data["peak_frame"] else 0
+        congestion = _calc_congestion(peak_count)
+
+        # 写入历史记录
+        create_record(
+            db=db,
+            user_id=user.id if user else None,
+            detection_type="video",
+            model_name=model_name,
+            filename=os.path.basename(video_path),
+            total_objects=int(data["avg_objects_per_frame"] * data["processed_frames"]),
+            max_objects=peak_count,
+            detection_time_sec=data["duration_sec"],
+            congestion_level=congestion,
+            extra_data={
+                "processed_frames": data["processed_frames"],
+                "total_frames": data["total_frames"],
+                "fps": data["fps"],
+                "duration_sec": data["duration_sec"],
+            },
+        )
 
         return VideoDetectionResponse(
             success=True,
@@ -113,13 +211,121 @@ async def get_target_list():
 
 
 @router.get("/history", response_model=HistoryResponse)
-async def get_detection_history():
+async def get_detection_history(
+    keyword: str = Query(None),
+    type: str = Query(None),
+    congestion: str = Query(None),
+    startDate: str = Query(None),
+    endDate: str = Query(None),
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
+):
+    records, total = query_records(
+        db=db,
+        user_id=user.id if user else None,
+        keyword=keyword,
+        detection_type=type,
+        congestion=congestion,
+        start_date=startDate,
+        end_date=endDate,
+        page=page,
+        page_size=pageSize,
+    )
+
+    items = []
+    for r in records:
+        items.append(HistoryItem(
+            id=r.id,
+            type=r.type,
+            filename=r.filename,
+            model_name=r.model_name,
+            total_objects=r.total_objects,
+            max_objects=r.max_objects,
+            detection_time_sec=r.detection_time_sec,
+            congestion=r.congestion_level or "道路畅通",
+            detection_time=r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
+            result_image_url=f"/static/results/{r.result_image_key}" if r.result_image_key else None,
+        ))
+
     return HistoryResponse(
         success=True,
         message="获取成功",
-        data=[],
-        total=0
+        data=items,
+        total=total,
     )
+
+
+@router.get("/detail/{record_id}", response_model=DetectionDetailResponse)
+async def get_detection_detail(
+    record_id: str,
+    db: Session = Depends(get_db),
+):
+    record = get_record_detail(db, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    boxes = []
+    for r in record.results:
+        boxes.append({
+            "x1": r.x1, "y1": r.y1, "x2": r.x2, "y2": r.y2,
+            "confidence": r.confidence, "class_id": r.class_id,
+            "class_name": r.class_name, "chinese_name": r.chinese_name,
+        })
+
+    return DetectionDetailResponse(
+        success=True,
+        message="获取成功",
+        data={
+            "id": record.id,
+            "type": record.type,
+            "filename": record.filename,
+            "model_name": record.model_name,
+            "total_objects": record.total_objects,
+            "max_objects": record.max_objects,
+            "detection_time_sec": record.detection_time_sec,
+            "congestion": record.congestion_level or "道路畅通",
+            "detection_time": record.created_at.strftime("%Y-%m-%d %H:%M:%S") if record.created_at else "",
+            "category_summary": json.loads(record.category_summary) if record.category_summary else {},
+            "boxes": boxes,
+            "result_image_url": f"/static/results/{record.result_image_key}" if record.result_image_key else None,
+        },
+    )
+
+
+@router.delete("/history/{record_id}", response_model=DeleteRecordResponse)
+async def delete_detection_record(
+    record_id: str,
+    db: Session = Depends(get_db),
+):
+    ok = delete_record(db, record_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return DeleteRecordResponse(success=True, message="删除成功")
+
+
+@router.get("/stats", response_model=UserStatsResponse)
+async def get_detection_stats(
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
+):
+    if not user:
+        return UserStatsResponse(
+            success=True, message="获取成功",
+            data={"total_detections": 0, "total_objects": 0, "success_rate": 0},
+        )
+    from app.services.history_service import get_user_stats
+    stats = get_user_stats(db, user.id)
+    return UserStatsResponse(success=True, message="获取成功", data=stats)
+
+
+def _calc_congestion(total: int) -> str:
+    if total > 20:
+        return "严重拥堵"
+    elif total >= 10:
+        return "交通缓行"
+    return "道路畅通"
 
 
 ALERT_THRESHOLD = 15

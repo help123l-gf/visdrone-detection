@@ -21,14 +21,14 @@
             <el-icon :size="18"><UserFilled /></el-icon>
           </el-avatar>
           <div class="user-info">
-            <span class="user-name">管理员</span>
-            <span class="user-role">系统运维</span>
+            <span class="user-name">{{ userName }}</span>
+            <span class="user-role">{{ userRole }}</span>
           </div>
           <el-icon class="user-arrow"><ArrowDown /></el-icon>
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item>
+            <el-dropdown-item @click="goProfile">
               <el-icon><User /></el-icon>个人中心
             </el-dropdown-item>
             <el-dropdown-item>
@@ -45,12 +45,26 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { HomeFilled, Bell, UserFilled, ArrowDown, User, Setting, SwitchButton } from "@element-plus/icons-vue";
 
 const route = useRoute();
 const router = useRouter();
+
+const userName = ref("用户");
+const userRole = ref("普通用户");
+
+onMounted(() => {
+  const stored = localStorage.getItem("user");
+  if (stored) {
+    try {
+      const u = JSON.parse(stored);
+      userName.value = u.nickname || u.username || "用户";
+      userRole.value = u.role === "admin" ? "系统管理员" : "普通用户";
+    } catch (e) {}
+  }
+});
 
 const nameMap = {
   "/detection": "单图分析",
@@ -68,7 +82,12 @@ const currentPageName = computed(() => {
 
 const handleLogout = () => {
   localStorage.removeItem("token");
+  localStorage.removeItem("user");
   router.push("/login");
+};
+
+const goProfile = () => {
+  router.push("/profile");
 };
 </script>
 

@@ -1,6 +1,6 @@
 import request from "../utils/request";
 
-// ── 单图检测（已实现）──
+// ── 单图检测 ──
 export const detectSingleImage = (data) => {
   return request({
     url: "/detection/single",
@@ -10,7 +10,7 @@ export const detectSingleImage = (data) => {
   });
 };
 
-// ── 批量检测（后端 TODO）──
+// ── 批量检测 ──
 export const detectBatch = (data) => {
   return request({
     url: "/detection/batch",
@@ -20,18 +20,17 @@ export const detectBatch = (data) => {
   });
 };
 
-// ── 视频分析（后端 TODO）──
+// ── 视频分析 ──
 export const detectVideo = (data) => {
   return request({
     url: "/detection/video",
     method: "post",
     data,
     headers: { "Content-Type": "multipart/form-data" },
-    // 返回逐帧检测结果: { frames: [{ timestamp, boxes }] }
   });
 };
 
-// ── 实时监控帧上传（后端 TODO）──
+// ── 实时监控帧上传（通过 WebSocket）──
 export const detectFrame = (data) => {
   return request({
     url: "/detection/monitor/frame",
@@ -41,13 +40,12 @@ export const detectFrame = (data) => {
   });
 };
 
-// ── 检测历史（后端 TODO）──
+// ── 检测历史 ──
 export const getDetectionHistory = (params) => {
   return request({
     url: "/detection/history",
     method: "get",
     params,
-    // params: { keyword, type, congestion, startDate, endDate, page, pageSize }
   });
 };
 
@@ -59,10 +57,26 @@ export const getDetectionDetail = (id) => {
   });
 };
 
+// ── 检测统计 ──
+export const getDetectionStats = () => {
+  return request({
+    url: "/detection/stats",
+    method: "get",
+  });
+};
+
 // ── 目标列表 ──
 export const getTargetList = () => {
   return request({
-    url: "/targets/list",
+    url: "/detection/targets/list",
     method: "get",
+  });
+};
+
+// ── 删除记录 ──
+export const deleteDetectionRecord = (id) => {
+  return request({
+    url: `/detection/history/${id}`,
+    method: "delete",
   });
 };

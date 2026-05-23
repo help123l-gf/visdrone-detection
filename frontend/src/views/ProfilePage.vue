@@ -12,32 +12,68 @@
             <el-icon :size="36"><UserFilled /></el-icon>
           </el-avatar>
           <div class="user-detail">
-            <div class="uname">管理员</div>
-            <div class="urole">系统运维</div>
-            <el-tag size="small" type="success" effect="light">已认证</el-tag>
+            <div class="uname">{{ user.nickname || user.username || '用户' }}</div>
+            <div class="urole">{{ user.role === 'admin' ? '系统管理员' : '普通用户' }}</div>
+            <el-tag size="small" type="success" effect="light">{{ user.is_active ? '已认证' : '未激活' }}</el-tag>
           </div>
         </div>
         <el-divider />
         <div class="info-list">
-          <div class="il"><span>邮箱</span><span>admin@visdrone.cn</span></div>
-          <div class="il"><span>注册时间</span><span>2026-05-01</span></div>
-          <div class="il"><span>上次登录</span><span>2026-05-21 10:30</span></div>
+          <div class="il"><span>邮箱</span><span>{{ user.email || '-' }}</span></div>
+          <div class="il"><span>注册时间</span><span>{{ user.created_at ? user.created_at.substring(0, 10) : '-' }}</span></div>
+          <div class="il"><span>用户ID</span><span>{{ user.id ? user.id.substring(0, 8) + '...' : '-' }}</span></div>
         </div>
-        <el-button type="primary" plain size="default" style="width:100%;margin-top:16px">编辑资料</el-button>
+        <el-button type="primary" plain size="default" style="width:100%;margin-top:16px" @click="$router.push('/history')">查看检测历史</el-button>
       </div>
 
       <div class="stats-cards">
-        <div class="stat-card"><div class="sv">156</div><div class="sl">总检测次数</div></div>
-        <div class="stat-card"><div class="sv">1,024</div><div class="sl">累计检测目标</div></div>
-        <div class="stat-card"><div class="sv">98.7%</div><div class="sl">检测成功率</div></div>
-        <div class="stat-card"><div class="sv">21</div><div class="sl">使用天数</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.total_detections }}</div><div class="sl">总检测次数</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.total_objects.toLocaleString() }}</div><div class="sl">累计检测目标</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.success_rate }}%</div><div class="sl">检测成功率</div></div>
+        <div class="stat-card"><div class="sv">--</div><div class="sl">使用天数</div></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, reactive, onMounted } from "vue";
 import { UserFilled } from "@element-plus/icons-vue";
+import request from "../utils/request";
+
+const user = ref({});
+const stats = reactive({
+  total_detections: 0,
+  total_objects: 0,
+  success_rate: 0,
+});
+
+onMounted(async () => {
+  // 从 localStorage 恢复用户信息
+  const stored = localStorage.getItem("user");
+  if (stored) {
+    try { user.value = JSON.parse(stored); } catch (e) {}
+  }
+
+  // 从 API 获取最新用户信息
+  try {
+    const res = await request.get("/auth/me");
+    if (res.success && res.data) {
+      user.value = res.data;
+      localStorage.setItem("user", JSON.stringify(res.data));
+    }
+  } catch (e) {}
+
+  // 获取统计信息
+  try {
+    const statRes = await request.get("/detection/stats");
+    if (statRes.success && statRes.data) {
+      stats.total_detections = statRes.data.total_detections || 0;
+      stats.total_objects = statRes.data.total_objects || 0;
+      stats.success_rate = statRes.data.success_rate || 0;
+    }
+  } catch (e) {}
+});
 </script>
 
 <style scoped>

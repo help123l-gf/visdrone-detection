@@ -30,6 +30,7 @@ import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { Message, Lock } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
+import request from "../utils/request";
 
 const router = useRouter();
 const loading = ref(false);
@@ -37,15 +38,23 @@ const formRef = ref(null);
 const form = reactive({ email: "" });
 const rules = { email: [{ required: true, message: "请输入邮箱", trigger: "blur" }] };
 
-const handleSubmit = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        ElMessage.success("重置链接已发送到您的邮箱");
+const handleSubmit = async () => {
+  formRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      const res = await request.post("/auth/forgot-password", { email: form.email });
+      if (res.success) {
+        ElMessage.success(res.message || "重置令牌已发送至您的邮箱");
+        if (res.data?.reset_token) {
+          ElMessage.info("开发模式：重置令牌 " + res.data.reset_token.substring(0, 8) + "...");
+        }
         router.push("/login");
-        loading.value = false;
-      }, 1200);
+      }
+    } catch (e) {
+      // error handled by interceptor
+    } finally {
+      loading.value = false;
     }
   });
 };
