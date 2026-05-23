@@ -1,5 +1,5 @@
 """用户认证服务：JWT、密码哈希、注册/登录/重置密码"""
-import uuid
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -21,16 +21,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: str, username: str, role: str = "user") -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     payload = {
-        "sub": user_id,
-        "username": username,
-        "role": role,
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "jti": str(uuid.uuid4()),
+        "sub": str(user_id),
+        "username": str(username),
+        "role": str(role),
+        "exp": int(expire.timestamp()),
+        "iat": int(now.timestamp()),
+        "jti": secrets.token_hex(16),
     }
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return jwt.encode(payload, key=settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict:

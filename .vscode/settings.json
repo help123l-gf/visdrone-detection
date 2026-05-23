@@ -1,5 +1,10 @@
 {
     "chat.tools.terminal.autoApprove": {
-        "D:\\visdrone-env\\Scripts\\pip.exe": true
+        "D:\\visdrone-env\\Scripts\\pip.exe": true,
+        "Test-Path": true,
+        "/^D:\\\\visdrone-env\\\\Scripts\\\\python\\.exe -c \"\nimport ctypes, os, sys\ndll_path = r'D:\\\\visdrone-env\\\\Lib\\\\site-packages\\\\torch\\\\lib\\\\c10\\.dll'\ntry:\n    ctypes\\.CDLL\\(dll_path\\)\n    print\\('c10\\.dll loaded OK'\\)\nexcept Exception as e:\n    print\\(f'Error: \\{e\\}'\\)\n\" 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }
