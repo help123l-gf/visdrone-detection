@@ -40,7 +40,9 @@
 <script setup>
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import { User, Message, Lock } from "@element-plus/icons-vue";
+import { register } from "../api/detection";
 
 const router = useRouter();
 const loading = ref(false);
@@ -59,16 +61,18 @@ const rules = {
   confirm: [{ required: true, message: "请确认密码", trigger: "blur" }, { validator: validateConfirm, trigger: "blur" }],
 };
 
-const handleRegister = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        localStorage.setItem("token", "authenticated");
-        router.push("/detection");
-        loading.value = false;
-      }, 600);
-    }
+const handleRegister = async () => {
+  formRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      const res = await register({ username: form.username, email: form.email, password: form.password });
+      if (res.success) {
+        ElMessage.success("注册成功，请登录");
+        router.push("/login");
+      }
+    } catch { /* interceptor handles */ }
+    finally { loading.value = false; }
   });
 };
 </script>

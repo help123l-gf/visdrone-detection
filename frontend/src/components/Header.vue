@@ -9,12 +9,6 @@
     </div>
 
     <div class="header-right">
-      <el-tooltip content="通知" placement="bottom">
-        <el-badge :value="3" :max="99" class="header-action">
-          <el-icon :size="20"><Bell /></el-icon>
-        </el-badge>
-      </el-tooltip>
-
       <el-dropdown trigger="click">
         <div class="user-area">
           <el-avatar :size="32" class="user-avatar">
@@ -47,7 +41,7 @@
 <script setup>
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { HomeFilled, Bell, UserFilled, ArrowDown, User, Setting, SwitchButton } from "@element-plus/icons-vue";
+import { HomeFilled, UserFilled, ArrowDown, User, Setting, SwitchButton } from "@element-plus/icons-vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -96,14 +90,6 @@ const handleLogout = () => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
-}
-.header-action {
-  cursor: pointer;
-  color: var(--text-secondary);
-}
-.header-action:hover {
-  color: var(--primary);
 }
 
 .user-area {

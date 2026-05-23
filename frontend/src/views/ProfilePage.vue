@@ -12,32 +12,44 @@
             <el-icon :size="36"><UserFilled /></el-icon>
           </el-avatar>
           <div class="user-detail">
-            <div class="uname">管理员</div>
-            <div class="urole">系统运维</div>
+            <div class="uname">{{ user.nickname || user.username }}</div>
+            <div class="urole">{{ user.role === 'admin' ? '管理员' : '普通用户' }}</div>
             <el-tag size="small" type="success" effect="light">已认证</el-tag>
           </div>
         </div>
         <el-divider />
         <div class="info-list">
-          <div class="il"><span>邮箱</span><span>admin@visdrone.cn</span></div>
-          <div class="il"><span>注册时间</span><span>2026-05-01</span></div>
-          <div class="il"><span>上次登录</span><span>2026-05-21 10:30</span></div>
+          <div class="il"><span>邮箱</span><span>{{ user.email }}</span></div>
+          <div class="il"><span>注册时间</span><span>{{ user.created_at?.slice(0,10) }}</span></div>
+          <div class="il"><span>用户ID</span><span>{{ user.id?.slice(0,8) }}...</span></div>
         </div>
-        <el-button type="primary" plain size="default" style="width:100%;margin-top:16px">编辑资料</el-button>
       </div>
 
       <div class="stats-cards">
-        <div class="stat-card"><div class="sv">156</div><div class="sl">总检测次数</div></div>
-        <div class="stat-card"><div class="sv">1,024</div><div class="sl">累计检测目标</div></div>
-        <div class="stat-card"><div class="sv">98.7%</div><div class="sl">检测成功率</div></div>
-        <div class="stat-card"><div class="sv">21</div><div class="sl">使用天数</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.total_detections }}</div><div class="sl">总检测次数</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.total_objects }}</div><div class="sl">累计检测目标</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.success_rate }}%</div><div class="sl">检测成功率</div></div>
+        <div class="stat-card"><div class="sv">{{ stats.usage_days }}</div><div class="sl">使用天数</div></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted } from "vue";
 import { UserFilled } from "@element-plus/icons-vue";
+import { getProfile, getStats } from "../api/detection";
+
+const user = ref({ username: "加载中...", email: "", role: "", nickname: "" });
+const stats = ref({ total_detections: 0, total_objects: 0, success_rate: 100, usage_days: 0 });
+
+onMounted(async () => {
+  try {
+    const [pr, sr] = await Promise.all([getProfile(), getStats()]);
+    if (pr?.success) user.value = pr.data;
+    if (sr?.success) stats.value = sr.data;
+  } catch { /* auth required */ }
+});
 </script>
 
 <style scoped>

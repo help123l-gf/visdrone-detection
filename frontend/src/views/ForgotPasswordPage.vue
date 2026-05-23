@@ -8,19 +8,25 @@
             <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
           </svg>
         </div>
-        <h1>找回密码</h1>
-        <p>输入注册邮箱，我们将发送重置链接</p>
+        <h1>重置密码</h1>
+        <p>输入用户名和新密码直接重置</p>
       </div>
 
       <el-form ref="formRef" :model="form" :rules="rules" size="large">
-        <el-form-item prop="email">
-          <el-input v-model="form.email" placeholder="注册邮箱"><template #prefix><el-icon><Message /></el-icon></template></el-input>
+        <el-form-item prop="username">
+          <el-input v-model="form.username" placeholder="用户名"><template #prefix><el-icon><User /></el-icon></template></el-input>
+        </el-form-item>
+        <el-form-item prop="new_password">
+          <el-input v-model="form.new_password" type="password" placeholder="新密码（至少6位）"><template #prefix><el-icon><Lock /></el-icon></template></el-input>
+        </el-form-item>
+        <el-form-item prop="confirm">
+          <el-input v-model="form.confirm" type="password" placeholder="确认新密码"><template #prefix><el-icon><Lock /></el-icon></template></el-input>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" class="auth-btn" :loading="loading" @click="handleSubmit">发送重置链接</el-button>
+          <el-button type="primary" class="auth-btn" :loading="loading" @click="handleReset">重 置 密 码</el-button>
         </el-form-item>
       </el-form>
-      <div class="auth-footer"><span>想起密码了？</span><router-link to="/login">返回登录</router-link></div>
+      <div class="auth-footer"><router-link to="/login">返回登录</router-link></div>
     </div>
   </div>
 </template>
@@ -28,25 +34,41 @@
 <script setup>
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
-import { Message, Lock } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
+import { User, Lock } from "@element-plus/icons-vue";
+import request from "../utils/request";
 
 const router = useRouter();
 const loading = ref(false);
 const formRef = ref(null);
-const form = reactive({ email: "" });
-const rules = { email: [{ required: true, message: "请输入邮箱", trigger: "blur" }] };
+const form = reactive({ username: "", new_password: "", confirm: "" });
 
-const handleSubmit = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        ElMessage.success("重置链接已发送到您的邮箱");
+const validateConfirm = (_rule, value, cb) => {
+  if (value !== form.new_password) cb(new Error("两次输入的密码不一致"));
+  else cb();
+};
+
+const rules = {
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  new_password: [{ required: true, message: "请输入新密码", trigger: "blur" }, { min: 6, message: "至少6位", trigger: "blur" }],
+  confirm: [{ required: true, message: "请确认密码", trigger: "blur" }, { validator: validateConfirm, trigger: "blur" }],
+};
+
+const handleReset = () => {
+  formRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      const res = await request({
+        url: "/auth/reset-password",
+        method: "post",
+        data: { username: form.username, new_password: form.new_password },
+      });
+      if (res.success) {
+        ElMessage.success("密码重置成功，请登录");
         router.push("/login");
-        loading.value = false;
-      }, 1200);
-    }
+      }
+    } catch { } finally { loading.value = false; }
   });
 };
 </script>

@@ -55,15 +55,17 @@
 <script setup>
 import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import { User, Lock } from "@element-plus/icons-vue";
+import { login } from "../api/detection";
 
 const router = useRouter();
 const loading = ref(false);
 const formRef = ref(null);
 
 const form = reactive({
-  username: "",
-  password: "",
+  username: "admin",
+  password: "admin123",
   remember: false,
 });
 
@@ -72,15 +74,21 @@ const rules = {
   password: [{ required: true, message: "请输入密码", trigger: "blur" }],
 };
 
-const handleLogin = () => {
-  formRef.value?.validate((valid) => {
-    if (valid) {
-      loading.value = true;
-      setTimeout(() => {
-        localStorage.setItem("token", "authenticated");
+const handleLogin = async () => {
+  formRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      const res = await login({ username: form.username, password: form.password });
+      if (res.success) {
+        localStorage.setItem("token", res.data.token);
+        ElMessage.success("登录成功");
         router.push("/detection");
-        loading.value = false;
-      }, 600);
+      }
+    } catch {
+      // error handled by interceptor
+    } finally {
+      loading.value = false;
     }
   });
 };

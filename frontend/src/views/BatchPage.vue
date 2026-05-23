@@ -127,7 +127,7 @@
           <div class="rc-thumb">
             <img
               v-if="item.result_image_url"
-              :src="'http://localhost:8000' + item.result_image_url"
+              :src="item.result_image_url?.startsWith('http') ? item.result_image_url : 'http://localhost:8000' + item.result_image_url"
               class="rc-img"
             />
             <el-icon v-else :size="32"><Picture /></el-icon>
@@ -164,6 +164,7 @@ import { use } from "echarts/core";
 import { PieChart, BarChart } from "echarts/charts";
 import { TitleComponent, TooltipComponent, LegendComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
+import { downloadResults } from "../api/detection";
 import request from "../utils/request";
 
 use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -194,7 +195,11 @@ const pieOption = computed(() => {
       radius: ["45%", "75%"],
       center: ["40%", "50%"],
       emphasis: { label: { fontSize: 16, fontWeight: "bold" } },
-      label: { show: false },
+      label: {
+        show: true,
+        formatter: "{b}\n{d}%",
+        fontSize: 10,
+      },
       data: items.map(d => ({ name: LABELS[d.class_name] || d.class_name, value: d.count })),
     }],
   };
@@ -204,7 +209,8 @@ const pieOption = computed(() => {
 const peakImageSrc = computed(() => {
   if (!batchData.value?.peak_image) return null;
   const r = batchData.value.results.find(r => r.filename === batchData.value.peak_image.filename);
-  return r ? "http://localhost:8000" + r.result_image_url : null;
+  const ru = r ? r.result_image_url : null;
+  return ru ? (ru.startsWith("http") ? ru : "http://localhost:8000" + ru) : null;
 });
 
 const peakTagType = computed(() => {
@@ -274,8 +280,15 @@ const startBatch = async () => {
 
 const previewPeakImage = () => { peakDialog.value = true; };
 
-const downloadReport = () => {
-  ElMessage.info("下载功能待实现（需后端 ZIP 打包接口）");
+const downloadReport = async () => {
+  try {
+    const blob = await downloadResults("");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "detection_results.zip"; a.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success("下载开始");
+  } catch { ElMessage.error("下载失败"); }
 };
 </script>
 

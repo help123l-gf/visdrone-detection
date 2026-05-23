@@ -114,18 +114,25 @@ class DetectionService:
         result_filename = f"result_{uuid.uuid4().hex}.jpg"
         result_path = os.path.join(settings.RESULT_DIR, result_filename)
 
-        annotated_image = results[0].plot()  # BGR format
-        annotated_rgb = annotated_image[..., ::-1]  # BGR -> RGB for PIL
+        annotated_image = results[0].plot()
+        annotated_rgb = annotated_image[..., ::-1]
         Image.fromarray(annotated_rgb).save(result_path)
 
-        detection_time = time.time() - start_time
+        # Upload to MinIO (alongside local storage)
+        result_url = get_file_url(result_filename, "static/results")
+        try:
+            from app.services.storage_service import upload_file as minio_upload
+            result_url = minio_upload(result_path, f"results/{result_filename}")
+        except Exception:
+            pass
 
+        detection_time = time.time() - start_time
         image_filename = os.path.basename(image_path)
 
         return DetectionResult(
             detection_id=detection_id,
             image_url=get_file_url(image_filename, "static/uploads"),
-            result_image_url=get_file_url(result_filename, "static/results"),
+            result_image_url=result_url,
             boxes=boxes,
             total_objects=len(boxes),
             detection_time=round(detection_time, 3),
@@ -282,6 +289,13 @@ class DetectionService:
         duration = total_frames / fps
 
         annotated_url = get_file_url(video_filename, "static/results") if processed > 0 else None
+        # Also upload annotated video to MinIO
+        if processed > 0:
+            try:
+                from app.services.storage_service import upload_file as minio_upload
+                annotated_url = minio_upload(video_path_out, f"videos/{video_filename}", "video/mp4")
+            except Exception:
+                pass
 
         return {
             "video_id": video_id,
@@ -295,6 +309,10 @@ class DetectionService:
             "peak_frame": peak,
             "avg_objects_per_frame": round(avg_objects, 1),
         }
+
+    @staticmethod
+    def _new_uuid() -> str:
+        return str(uuid.uuid4())
 
     def _name_to_id(self, name: str, class_names: dict = None) -> int:
         names = class_names or self.class_names.get("visdrone-v1", {})

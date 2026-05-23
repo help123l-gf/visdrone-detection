@@ -154,8 +154,9 @@ const CAT_LABELS = {
 
 /* ── Annotated video URL ── */
 const annotatedSrc = computed(() => {
-  if (!videoData.value?.annotated_video_url) return null;
-  return "http://localhost:8000" + videoData.value.annotated_video_url;
+  const url = videoData.value?.annotated_video_url;
+  if (!url) return null;
+  return url.startsWith("http") ? url : "http://localhost:8000" + url;
 });
 
 /* ── Nearest frame data ── */

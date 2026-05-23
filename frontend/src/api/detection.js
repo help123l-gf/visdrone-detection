@@ -1,68 +1,31 @@
 import request from "../utils/request";
 
-// ── 单图检测（已实现）──
-export const detectSingleImage = (data) => {
-  return request({
-    url: "/detection/single",
-    method: "post",
-    data,
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-};
+// Single
+export const detectSingleImage = (data) => request({ url: "/detection/single", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
 
-// ── 批量检测（后端 TODO）──
-export const detectBatch = (data) => {
-  return request({
-    url: "/detection/batch",
-    method: "post",
-    data,
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-};
+// Batch
+export const detectBatch = (data) => request({ url: "/detection/batch", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
 
-// ── 视频分析（后端 TODO）──
-export const detectVideo = (data) => {
-  return request({
-    url: "/detection/video",
-    method: "post",
-    data,
-    headers: { "Content-Type": "multipart/form-data" },
-    // 返回逐帧检测结果: { frames: [{ timestamp, boxes }] }
-  });
-};
+// Video
+export const detectVideo = (data) => request({ url: "/detection/video", method: "post", data, headers: { "Content-Type": "multipart/form-data" }, timeout: 600000 });
 
-// ── 实时监控帧上传（后端 TODO）──
-export const detectFrame = (data) => {
-  return request({
-    url: "/detection/monitor/frame",
-    method: "post",
-    data,
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-};
+// History
+export const getDetectionHistory = (params) => request({ url: "/detection/history", method: "get", params });
 
-// ── 检测历史（后端 TODO）──
-export const getDetectionHistory = (params) => {
-  return request({
-    url: "/detection/history",
-    method: "get",
-    params,
-    // params: { keyword, type, congestion, startDate, endDate, page, pageSize }
-  });
-};
+// Detail
+export const getDetectionDetail = (id) => request({ url: `/detection/detail/${id}`, method: "get" });
 
-// ── 检测详情 ──
-export const getDetectionDetail = (id) => {
-  return request({
-    url: `/detection/detail/${id}`,
-    method: "get",
-  });
-};
+// Targets
+export const getTargetList = () => request({ url: "/targets/list", method: "get" });
 
-// ── 目标列表 ──
-export const getTargetList = () => {
-  return request({
-    url: "/targets/list",
-    method: "get",
-  });
-};
+// Auth
+export const login = (data) => request({ url: "/auth/login", method: "post", data });
+export const register = (data) => request({ url: "/auth/register", method: "post", data });
+export const getProfile = () => request({ url: "/auth/me", method: "get" });
+export const getStats = () => request({ url: "/auth/stats", method: "get" });
+
+// Download
+export const downloadResults = (recordIds) => request({ url: "/detection/download", method: "get", params: { record_ids: recordIds }, responseType: "blob" });
+
+// Delete
+export const deleteRecord = (id) => request({ url: `/detection/delete/${id}`, method: "delete" });

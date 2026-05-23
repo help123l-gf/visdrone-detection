@@ -432,7 +432,9 @@ const startDetection = async ()=>{
     const fd=new FormData(); fd.append("file",file); fd.append("model_name",selectedModel.value);
     const res=await detectSingleImage(fd);
     if(res.success&&res.data){
-      result.value=res.data; resultSrc.value="http://localhost:8000"+res.data.result_image_url;
+      result.value=res.data;
+      const ru = res.data.result_image_url;
+      resultSrc.value = ru.startsWith("http") ? ru : "http://localhost:8000" + ru;
       viewMode.value="compare";
       ElMessage.success(`检测完成，发现 ${res.data.total_objects} 个目标`);
     }else{ ElMessage.error(res.message||"检测失败"); }
