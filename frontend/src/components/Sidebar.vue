@@ -56,7 +56,7 @@ const navGroups = [
       { name: "单图分析", path: "/detection", icon: Picture },
       { name: "批量归档", path: "/batch", icon: Box },
       { name: "视频分析", path: "/video", icon: VideoCamera },
-      { name: "实时监控", path: "/monitor", icon: Monitor, badge: "NEW" },
+      { name: "实时监控", path: "/monitor", icon: Monitor },
     ],
   },
   {
