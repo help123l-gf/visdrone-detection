@@ -5,7 +5,7 @@
       <p class="page-desc">调用本地摄像头，实时检测画面中的目标并提供异常告警</p>
     </div>
 
-    <!-- Alert bar -->
+    <!-- 告警栏 -->
     <div class="alert-bar" :class="{ active: isAlerting }">
       <span class="alert-icon">{{ isAlerting ? '🚨' : '✅' }}</span>
       <span class="alert-text" v-if="isAlerting">⚠️ 警告：目标数超过阈值（{{ alertThreshold }}）</span>
@@ -13,7 +13,7 @@
       <span class="alert-count">阈值: {{ alertThreshold }} | 模型: visdrone-v1</span>
     </div>
 
-    <!-- Main monitor -->
+    <!-- 监控主区域 -->
     <div class="monitor-layout">
       <div class="monitor-main card">
         <div class="monitor-header">
@@ -45,7 +45,7 @@
         </div>
       </div>
 
-      <!-- Side metrics -->
+      <!-- 侧边指标 -->
       <div class="monitor-side">
         <div class="card counter-card">
           <div class="live-dot" :class="{ active: isMonitoring }"></div>
@@ -76,7 +76,7 @@
           </div>
         </div>
 
-        <!-- Current frame detail -->
+        <!-- 当前帧明细 -->
         <div class="card">
           <div class="card-header"><span class="card-title">帧级明细</span></div>
           <div v-if="currentFrameData && Object.keys(currentFrameData.category_counts).length" class="frame-detail">
@@ -88,7 +88,7 @@
           <div v-else class="empty-inline">{{ isMonitoring ? '等待检测结果...' : '启动监控后显示' }}</div>
         </div>
 
-        <!-- Alert log -->
+        <!-- 告警日志 -->
         <div class="card alert-log-card">
           <div class="card-header">
             <span class="card-title">告警记录</span>
@@ -144,7 +144,7 @@ const CAT_COLORS = {
   car:"#3b82f6", van:"#8b5cf6", truck:"#f59e0b", bus:"#ef4444",
   motor:"#06b6d4", bicycle:"#10b981", tricycle:"#ec4899",
   "awning-tricycle":"#f97316", pedestrian:"#6366f1", people:"#84cc16",
-  // COCO
+  // COCO 通用类别
   person:"#ef4444", motorcycle:"#f59e0b", airplane:"#8b5cf6",
   train:"#6366f1", boat:"#06b6d4", "traffic light":"#f97316",
   bench:"#84cc16", bird:"#ec4899", cat:"#3b82f6", dog:"#10b981",
@@ -206,7 +206,7 @@ const startMonitor = async () => {
     cameraEl.value.srcObject = stream;
     await nextTick();
 
-    // Connect WebSocket
+    // 建立 WebSocket 连接
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl = `${protocol}://${window.location.host}/api/detection/ws/monitor?model_name=${monitorModel.value}`;
     ws = new WebSocket(wsUrl);
@@ -227,7 +227,7 @@ const startMonitor = async () => {
       totalDetections.value += data.total_objects;
       drawBoxes(data.boxes, data.frame_w, data.frame_h);
 
-      // Alert logic
+      // 告警逻辑
       if (data.alert && !isAlerting.value) {
         isAlerting.value = true;
         alertCount.value++;
@@ -238,7 +238,7 @@ const startMonitor = async () => {
         isAlerting.value = false;
       }
 
-      // FPS calc
+      // 计算 FPS
       const now = performance.now();
       if (lastFrameTime > 0) {
         frameTimestamps.push(now - lastFrameTime);
@@ -284,7 +284,7 @@ const startElapsedTimer = () => {
   elapsedTimer = setInterval(() => { elapsed.value++; }, 1000);
 };
 
-/* ── Canvas box drawing ── */
+/* ── Canvas 画检测框 ── */
 const drawBoxes = (boxes, fw, fh) => {
   const cvs = overlayEl.value;
   const feed = feedRef.value;
@@ -329,7 +329,7 @@ const drawBoxes = (boxes, fw, fh) => {
   }
 };
 
-/* ── Stop ── */
+/* ── 停止监控 ── */
 const stopMonitor = () => {
   if (ws) { ws.close(); ws = null; }
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
@@ -342,7 +342,7 @@ const stopMonitor = () => {
   fps.value = 0;
   currentFrameData.value = null;
 
-  // Clear canvas
+  // 清空画布
   const cvs = overlayEl.value;
   if (cvs) { const ctx = cvs.getContext("2d"); ctx.clearRect(0, 0, cvs.width, cvs.height); }
 };
@@ -356,7 +356,7 @@ onUnmounted(() => stopMonitor());
 .page-title { font-size: 20px; font-weight: 600; }
 .page-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
-/* Alert bar */
+/* ===== 告警栏 ===== */
 .alert-bar {
   display: flex; align-items: center; gap: 12px; padding: 10px 18px;
   border-radius: 8px; margin-bottom: 16px;
@@ -370,7 +370,7 @@ onUnmounted(() => stopMonitor());
 .alert-bar.active .alert-text { color: var(--danger); }
 .alert-count { font-size: 11px; color: var(--text-muted); }
 
-/* Layout */
+/* ===== 布局 ===== */
 .monitor-layout { display: flex; gap: 20px; }
 .monitor-main { flex: 1; min-width: 0; }
 .monitor-side { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -379,7 +379,7 @@ onUnmounted(() => stopMonitor());
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .card-title { font-size: 14px; font-weight: 600; }
 
-/* Monitor header */
+/* ===== 监控头栏 ===== */
 .monitor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .monitor-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .live-indicator { width: 9px; height: 9px; border-radius: 50%; background: #9ca3af; }
@@ -387,7 +387,7 @@ onUnmounted(() => stopMonitor());
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 .monitor-controls { display: flex; align-items: center; gap: 10px; }
 
-/* Camera */
+/* ===== 摄像头画面 ===== */
 .camera-feed {
   background: #000; border-radius: 8px; position: relative; overflow: hidden;
   aspect-ratio: 16/10; display: flex; align-items: center; justify-content: center;
@@ -397,7 +397,7 @@ onUnmounted(() => stopMonitor());
 .camera-off { text-align: center; color: #6b7280; }
 .camera-off p { margin-top: 12px; }
 
-/* Counter */
+/* ===== 实时计数 ===== */
 .counter-card { text-align: center; padding: 24px; position: relative; }
 .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; position: absolute; top: 16px; right: 16px; }
 .live-dot.active { background: var(--danger); animation: pulse 1.5s infinite; }
@@ -406,19 +406,19 @@ onUnmounted(() => stopMonitor());
 .counter-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 .counter-time { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
-/* Realtime grid */
+/* ===== 实时指标 ===== */
 .realtime-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .rt-item { text-align: center; background: #f9fafb; border-radius: 8px; padding: 12px 4px; }
 .rt-value { font-size: 22px; font-weight: 700; color: var(--primary); }
 .rt-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-/* Frame detail */
+/* ===== 帧明细 ===== */
 .frame-detail { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
 .fd-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; }
 .fd-name { color: var(--text-secondary); }
 .fd-count { font-weight: 600; }
 
-/* Alert log */
+/* ===== 告警日志 ===== */
 .alert-log-card { flex: 1; }
 .log-list { max-height: 200px; overflow-y: auto; }
 .log-empty { text-align: center; color: var(--text-muted); padding: 24px; font-size: 13px; }

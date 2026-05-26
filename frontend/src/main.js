@@ -1,5 +1,5 @@
-import { createApp } from "vue";
-import "./style.css";
+import { createApp } from "vue"; //用来创建一个 Vue 应用实例
+import "./style.css"; // 直接引入一个全局 CSS 文件,让整个应用都有这些基础样式
 import App from "./App.vue";
 import ElementPlus from "element-plus";
 import "element-plus/dist/index.css";

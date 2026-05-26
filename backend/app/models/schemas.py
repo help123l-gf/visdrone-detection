@@ -13,6 +13,21 @@ class DetectionBox(BaseModel):
     class_name: str
 
 
+class ClusteringData(BaseModel):
+    ratio: float                # 交通聚类率 (0~1)
+    cluster_count: int          # 总聚类数（含停车线）
+    traffic_cluster_count: int  # 交通聚类数（剔除停车线后）
+    avg_spacing: float          # 平均车距（车宽倍数）
+    label: str                  # 中文标签：密集聚集 / 局部聚集 / 均匀分散
+    level: str                  # dense / moderate / sparse
+
+
+class CongestionInfo(BaseModel):
+    level: str                  # clear / slow / congested
+    label: str                  # 道路畅通 / 交通缓行 / 严重拥堵
+    emoji: str                  # ✅ / ⚠️ / 🚨
+
+
 class DetectionResult(BaseModel):
     detection_id: str
     image_url: str
@@ -22,6 +37,8 @@ class DetectionResult(BaseModel):
     detection_time: float
     model_name: str
     created_at: datetime
+    clustering: Optional[ClusteringData] = None
+    congestion: Optional[CongestionInfo] = None
 
 
 class SingleDetectionResponse(BaseModel):

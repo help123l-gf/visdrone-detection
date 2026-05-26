@@ -5,7 +5,7 @@
       <p class="page-desc">上传无人机航拍图片，获取目标检测结果与交通态势评估报告</p>
     </div>
 
-    <!-- Upload -->
+    <!-- 上传区域 -->
     <div class="upload-zone" :class="{ 'has-file': originalSrc }" @click="triggerUpload"
       @dragover.prevent @drop.prevent="handleDrop">
       <input ref="fileInput" type="file" accept="image/*" class="file-hidden" @change="handleFileChange" />
@@ -23,7 +23,7 @@
       </template>
     </div>
 
-    <!-- Toolbar -->
+    <!-- 工具栏 -->
     <div class="toolbar">
       <div class="toolbar-left">
         <span class="toolbar-label">检测模型：</span>
@@ -45,7 +45,7 @@
     </div>
 
     <div class="detection-layout">
-      <!-- ============ LEFT: image ============ -->
+      <!-- ============ 左侧：图片区域 ============ -->
       <div class="image-panel card">
         <div class="card-header">
           <span class="card-title">检测画面</span>
@@ -67,7 +67,7 @@
         </div>
       </div>
 
-      <!-- ============ RIGHT: dashboard ============ -->
+      <!-- ============ 右侧：数据仪表盘 ============ -->
       <div class="dashboard">
 
         <!-- ═══ 拥堵评级 ═══ -->
@@ -189,22 +189,28 @@
 </template>
 
 <script setup>
+/* ============================================================
+   单图分析 — 核心脚本
+   数据流：用户选图 → POST /api/detection/single → YOLO推理
+   → 返回 DetectionResult → 计算拥堵/聚类/规模 → 渲染面板
+   ============================================================ */
 import { ref, computed } from "vue";
 import { ElMessage, ElLoading } from "element-plus";
 import { UploadFilled, Picture, Search, Check, Switch } from "@element-plus/icons-vue";
 import { detectSingleImage } from "../api/detection";
 
-const selectedModel = ref("visdrone-v1");
-const fileInput = ref(null);
-const originalSrc = ref("");
-const resultSrc = ref("");
-const result = ref(null);
-const detecting = ref(false);
-const viewMode = ref("compare");
-const imageWidth = ref(0);
-const imageHeight = ref(0);
+// ── 状态变量 ──
+const selectedModel = ref("visdrone-v1");   // 当前选中的检测模型
+const fileInput = ref(null);                 // 隐藏的 <input type=file> 引用
+const originalSrc = ref("");                 // 原图 blob URL
+const resultSrc = ref("");                   // 标注图 URL（MinIO 或本地）
+const result = ref(null);                    // 后端返回的 DetectionResult 对象
+const detecting = ref(false);                // 是否正在请求后端
+const viewMode = ref("compare");             // 左侧画面模式: compare | result | original
+const imageWidth = ref(0);                   // 上传图片的自然宽度
+const imageHeight = ref(0);                  // 上传图片的自然高度
 
-/* ── Constants ── */
+// ── 类别颜色与中文名映射 ──
 const CAT_COLORS = {
   car:"#3b82f6", van:"#8b5cf6", truck:"#f59e0b", bus:"#ef4444",
   motor:"#06b6d4", bicycle:"#10b981", tricycle:"#ec4899",
@@ -216,7 +222,7 @@ const CAT_LABELS = {
   "awning-tricycle":"遮阳三轮车", pedestrian:"行人", people:"人群",
 };
 
-/* ── Vehicle cats for bar chart ── */
+// ── 车辆类型分布（水平条形图数据） ──
 const vehicleCats = computed(() => {
   const keys = ["car","van","truck","bus","motor","bicycle","tricycle","awning-tricycle"];
   if (!result.value) return keys.map(k=>({ key:k, label:CAT_LABELS[k]||k, count:0, color:CAT_COLORS[k]||"#cbd5e1" }));
@@ -227,7 +233,7 @@ const vehicleCats = computed(() => {
 });
 const totalVehicles = computed(()=> vehicleCats.value.reduce((s,c)=>s+c.count,0));
 
-/* ── Grouped detail table ── */
+// ── 目标明细表（按类别聚合） ──
 const groupedDetails = computed(()=>{
   if (!result.value) return [];
   const boxes = result.value.boxes;
@@ -244,133 +250,16 @@ const groupedDetails = computed(()=>{
   }));
 });
 
-/* ── Clustering: pairwise width normalization + linear cluster filter ── */
-const clustering = computed(() => {
-  if (!result.value || result.value.boxes.length < 2) {
-    return { ratio: 0, clusterCount: 0, avgSpacing: 0, trafficClusterCount: 0, label: "无数据", level: "" };
-  }
-  const boxes = result.value.boxes;
-  const n = boxes.length;
+// ── 从 API 响应中直接读取聚类与拥堵数据（后端已算好） ──
+const clustering = computed(() => result.value?.clustering || { ratio: 0, clusterCount: 0, avgSpacing: 0, trafficClusterCount: 0, label: "无数据", level: "" });
+const congestion = computed(() => result.value?.congestion || { level: "", label: "就绪", emoji: "—" });
 
-  const widths = boxes.map(b => Math.max(b.x2 - b.x1, 1));
-  const centerX = boxes.map(b => (b.x1 + b.x2) / 2);
-  const centerY = boxes.map(b => (b.y1 + b.y2) / 2);
-
-  // Nearest-neighbor: normalize by pairwise average width
-  const nnDistances = [];
-  for (let i = 0; i < n; i++) {
-    let minDist = Infinity;
-    for (let j = 0; j < n; j++) {
-      if (i === j) continue;
-      const d = Math.hypot(centerX[i] - centerX[j], centerY[i] - centerY[j]);
-      const ref = (widths[i] + widths[j]) / 2;
-      const normalized = d / ref;
-      if (normalized < minDist) minDist = normalized;
-    }
-    nnDistances.push(minDist);
-  }
-
-  // Build clusters
-  const CLUSTER_THRESHOLD = 2.5;
-  const visited = new Array(n).fill(false);
-  const clusters = []; // each: { indices[], isLinear }
-
-  for (let i = 0; i < n; i++) {
-    if (visited[i]) continue;
-    const queue = [i];
-    visited[i] = true;
-    const members = [];
-    while (queue.length) {
-      const cur = queue.pop();
-      members.push(cur);
-      for (let j = 0; j < n; j++) {
-        if (visited[j]) continue;
-        const pixelDist = Math.hypot(centerX[cur] - centerX[j], centerY[cur] - centerY[j]);
-        const ref = (widths[cur] + widths[j]) / 2;
-        if (pixelDist / ref < CLUSTER_THRESHOLD) {
-          visited[j] = true;
-          queue.push(j);
-        }
-      }
-    }
-    if (members.length >= 3) {
-      clusters.push(members);
-    }
-  }
-
-  // Filter: detect linear clusters (parked cars along curb/street)
-  // Use PCA: ratio of eigenvalues of covariance matrix > 4 → linear (parked)
-  const trafficClusters = [];
-  for (const members of clusters) {
-    if (members.length < 5) { trafficClusters.push(members); continue; } // too small to judge
-
-    const xs = members.map(k => centerX[k]);
-    const ys = members.map(k => centerY[k]);
-    const mx = xs.reduce((a, x) => a + x, 0) / xs.length;
-    const my = ys.reduce((a, y) => a + y, 0) / ys.length;
-
-    let covXX = 0, covYY = 0, covXY = 0;
-    for (let k = 0; k < xs.length; k++) {
-      const dx = xs[k] - mx, dy = ys[k] - my;
-      covXX += dx * dx;
-      covYY += dy * dy;
-      covXY += dx * dy;
-    }
-    covXX /= xs.length; covYY /= xs.length; covXY /= xs.length;
-
-    // Eigenvalues of [[covXX, covXY], [covXY, covYY]]
-    const trace = covXX + covYY;
-    const det = covXX * covYY - covXY * covXY;
-    const discriminant = Math.sqrt(Math.max(trace * trace - 4 * det, 0));
-    const lambda1 = (trace + discriminant) / 2;
-    const lambda2 = (trace - discriminant) / 2;
-    // Elongation ratio (handle degenerate cases)
-    const elongation = lambda2 > 1e-6 ? lambda1 / lambda2 : 999;
-
-    if (elongation > 4) {
-      // Linear cluster — likely parked, not traffic
-      continue;
-    }
-    trafficClusters.push(members);
-  }
-
-  // Count only traffic clusters (non-linear)
-  const trafficClusterCount = trafficClusters.length;
-  let trafficClusteredVehicles = 0;
-  const trafficSet = new Set(trafficClusters.flat());
-  for (const members of trafficClusters) {
-    trafficClusteredVehicles += members.length;
-  }
-
-  const ratio = n > 0 ? trafficClusteredVehicles / n : 0;
-  const allClusteredCount = clusters.reduce((s, c) => s + c.length, 0);
-  const rawRatio = n > 0 ? allClusteredCount / n : 0;
-  const avgSpacing = nnDistances.reduce((a, d) => a + d, 0) / nnDistances.length;
-
-  let label, level;
-  if (ratio >= 0.75)      { label = "密集聚集"; level = "dense"; }
-  else if (ratio >= 0.45) { label = "局部聚集"; level = "moderate"; }
-  else                     { label = "均匀分散"; level = "sparse"; }
-
-  return { ratio, clusterCount: clusters.length, trafficClusterCount, avgSpacing: Math.round(avgSpacing * 10) / 10, label, level, rawRatio };
-});
-
-/* ── Congestion: relaxed + linear cluster excluded ── */
-const congestion = computed(() => {
-  if (!result.value) return { level: "", label: "就绪", emoji: "—" };
-  const { ratio, clusterCount, trafficClusterCount } = clustering.value;
-  if (ratio >= 0.75) return { level: "congested", label: "严重拥堵", emoji: "🚨" };
-  if (ratio >= 0.45) return { level: "slow",      label: "交通缓行", emoji: "⚠️" };
-  if (totalVehicles.value > 0) return { level: "clear", label: "道路畅通", emoji: "✅" };
-  return { level: "", label: "无车辆", emoji: "🔘" };
-});
-
-/* ── Traffic diagnosis text ── */
+// ── 智能诊断文本 ──
 const trafficDiagnosis = computed(() => {
   if (!result.value || totalVehicles.value === 0) return "";
-  const { ratio, clusterCount, trafficClusterCount, avgSpacing, rawRatio } = clustering.value;
+  const { ratio, clusterCount, trafficClusterCount, avgSpacing } = clustering.value;
   const parts = [];
-  const parkedFiltered = clusterCount - trafficClusterCount;
+  const parkedFiltered = (clusterCount || 0) - (trafficClusterCount || 0);
 
   if (ratio >= 0.75) {
     parts.push(`${(ratio*100).toFixed(0)}% 车辆形成非线性的交通聚类（${trafficClusterCount} 个），车距仅 ${avgSpacing}x，存在拥堵风险。`);
@@ -391,7 +280,7 @@ const trafficDiagnosis = computed(() => {
   return parts.join(" ");
 });
 
-/* ── Vehicle size groups (bbox area in px²) ── */
+// ── 车辆规模构成（按 bbox 面积三分） ──
 const sizeGroups = computed(()=>{
   if (!result.value) return [];
   const boxes = result.value.boxes;
@@ -407,7 +296,7 @@ const sizeGroups = computed(()=>{
   return [groups.small, groups.medium, groups.large].filter(g=>g.count>0);
 });
 
-/* ── File handling ── */
+// ── 文件上传与拖拽 ──
 const triggerUpload = ()=> fileInput.value?.click();
 const reupload = ()=> fileInput.value?.click();
 const handleDrop = (e)=>{ const f=e.dataTransfer.files[0]; if(f) processFile(f); };
@@ -423,7 +312,7 @@ const processFile = (file)=>{
   fileInput.value._pendingFile=file;
 };
 
-/* ── Detection ── */
+// ── 发起检测请求 ──
 const startDetection = async ()=>{
   const file=fileInput.value?._pendingFile; if(!file) return;
   detecting.value=true;
@@ -433,6 +322,7 @@ const startDetection = async ()=>{
     const res=await detectSingleImage(fd);
     if(res.success&&res.data){
       result.value=res.data;
+      // result 是 Vue 响应式变量，赋值后所有依赖它的 computed 自动重新计算，页面即时更新
       const ru = res.data.result_image_url;
       resultSrc.value = ru.startsWith("http") ? ru : "http://localhost:8000" + ru;
       viewMode.value="compare";
@@ -444,12 +334,13 @@ const startDetection = async ()=>{
 </script>
 
 <style scoped>
+/* ===== 页面容器：Flex 列布局，撑满视口，禁止整页滚动 ===== */
 .page-container { padding: 24px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 .page-header { margin-bottom: 16px; flex-shrink: 0; }
 .page-title { font-size: 20px; font-weight: 600; }
 .page-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
-/* Upload */
+/* ===== 上传区域 ===== */
 .upload-zone { border:2px dashed #d1d5db; border-radius:10px; padding:20px; text-align:center; cursor:pointer; transition:all .2s; margin-bottom:12px; background:#fff; flex-shrink:0; }
 .upload-zone:hover { border-color:var(--primary); background:var(--primary-bg); }
 .upload-zone.has-file { padding:12px 20px; border-style:solid; border-color:var(--primary); }
@@ -459,18 +350,18 @@ const startDetection = async ()=>{
 .uploaded-size { font-size:13px; color:var(--text-secondary); }
 .file-hidden { display:none; }
 
-/* Toolbar */
+/* ===== 工具栏 ===== */
 .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-shrink:0; }
 .toolbar-left { display:flex; align-items:center; gap:12px; }
 .toolbar-label { font-size:13px; color:var(--text-secondary); }
 
-/* Layout — fills remaining viewport, no page-level scroll */
+/* ===== 左右分栏：图片区自适应填充，仪表盘固定宽度且内部滚动 ===== */
 .detection-layout { flex: 1; display: flex; gap: 20px; min-height: 0; overflow: hidden; }
 .image-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 .image-panel .card-header { flex-shrink: 0; }
 .dashboard { width: 380px; flex-shrink: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
 
-/* Image viewer — fills remaining space in left panel */
+/* ===== 图片查看器：自适应撑满左侧剩余高度 ===== */
 .image-viewer { flex: 1; min-height: 200px; background: #111827; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .main-image { width:100%; height:100%; object-fit:contain; }
 .image-placeholder { text-align:center; color:#6b7280; }
@@ -481,13 +372,13 @@ const startDetection = async ()=>{
 .split-label { position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.6); color:#fff; font-size:12px; padding:3px 12px; border-radius:4px; }
 .split-divider { width:2px; background:#374151; flex-shrink:0; }
 
-/* Cards */
+/* ===== 通用卡片 ===== */
 .card { background:#fff; border-radius:10px; box-shadow:var(--card-shadow); padding:18px; }
 .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
 .card-title { font-size:14px; font-weight:600; }
 .card-count { font-size:12px; color:var(--text-muted); }
 
-/* ── Congestion ── */
+/* ===== 拥堵评级卡片（三色主题） ===== */
 .congestion-card.clear  { background:var(--traffic-bg-clear);  border:1px solid rgba(34,197,94,.25); }
 .congestion-card.slow   { background:var(--traffic-bg-slow);   border:1px solid rgba(245,158,11,.25); }
 .congestion-card.congested { background:var(--traffic-bg-congested); border:1px solid rgba(239,68,68,.25); }
@@ -497,9 +388,8 @@ const startDetection = async ()=>{
 .congestion-sub { font-size:12px; color:var(--text-secondary); margin-top:2px; }
 .congestion-diagnosis { font-size:12px; color:var(--text-secondary); line-height:1.6; padding:8px 12px; background:rgba(255,255,255,.6); border-radius:6px; }
 
-/* ── Distribution panel ── */
+/* ===== 车辆分布特征面板 ===== */
 .dist-panel { display:flex; flex-direction:column; gap:14px; }
-.dist-gauge { }
 .gauge-bar { height:10px; background:#e5e7eb; border-radius:5px; overflow:hidden; }
 .gauge-fill { height:100%; border-radius:5px; transition:width .3s; }
 .gauge-ticks { display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); margin-top:4px; padding:0 2px; }
@@ -510,7 +400,7 @@ const startDetection = async ()=>{
 .dm-lbl { font-size:10px; color:var(--text-muted); margin-top:2px; }
 .dm-note { font-size:9px; color:var(--text-muted); display:block; margin-top:1px; }
 
-/* ── Bar chart ── */
+/* ===== 车辆类型分布（水平条形图） ===== */
 .bar-chart { display:flex; flex-direction:column; gap:8px; }
 .bar-row { display:flex; align-items:center; gap:8px; }
 .bar-label { width:64px; font-size:12px; font-weight:500; flex-shrink:0; }
@@ -519,7 +409,7 @@ const startDetection = async ()=>{
 .bar-value { width:52px; font-size:12px; font-weight:600; text-align:right; flex-shrink:0; }
 .bar-pct { font-weight:400; opacity:.6; }
 
-/* ── Size breakdown ── */
+/* ===== 车辆规模构成（小/中/大型） ===== */
 .size-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
 .size-label { font-size:12px; font-weight:600; width:56px; flex-shrink:0; }
 .size-desc { font-size:10px; color:var(--text-muted); width:130px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -527,7 +417,7 @@ const startDetection = async ()=>{
 .size-fill { height:100%; border-radius:3px; transition:width .3s; }
 .size-num { width:28px; font-size:13px; font-weight:700; text-align:right; flex-shrink:0; }
 
-/* ── Detail table ── */
+/* ===== 目标明细聚合表格 ===== */
 .detail-table-wrapper { max-height:200px; overflow-y:auto; }
 .detail-table { width:100%; border-collapse:collapse; font-size:13px; }
 .detail-table th { text-align:left; padding:6px 4px 8px; font-size:11px; color:var(--text-muted); font-weight:500; border-bottom:1px solid var(--border-color); }
@@ -536,7 +426,7 @@ const startDetection = async ()=>{
 .detail-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
 .td-num { text-align:center; font-variant-numeric:tabular-nums; }
 
-/* ── Info ── */
+/* ===== 检测信息 ===== */
 .info-row { display:flex; justify-content:space-between; padding:6px 0; font-size:13px; }
 .info-label { color:var(--text-secondary); }
 .info-val { font-weight:500; }

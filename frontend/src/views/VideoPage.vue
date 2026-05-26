@@ -5,7 +5,7 @@
       <p class="page-desc">上传无人机航拍视频，逐帧检测目标并绘制流量变化趋势</p>
     </div>
 
-    <!-- Upload -->
+    <!-- 上传区域 -->
     <div v-if="!videoData" class="upload-block">
       <div class="upload-inner" @dragover.prevent @drop.prevent="handleDrop">
         <input ref="videoInput" type="file" accept="video/*" class="file-hidden" @change="handleVideo" />
@@ -30,10 +30,10 @@
       </div>
     </div>
 
-    <!-- Results -->
+    <!-- 分析结果 -->
     <div v-if="videoData" class="analysis-layout">
       <div class="left-col">
-        <!-- Video player -->
+        <!-- 视频播放器 -->
         <div class="card player-card">
           <div class="card-header">
             <span class="card-title">检测画面</span>
@@ -63,7 +63,7 @@
           </div>
         </div>
 
-        <!-- Chart -->
+        <!-- ECharts 图表 -->
         <div class="card chart-card">
           <div class="card-header">
             <span class="card-title">流量趋势图</span>
@@ -76,7 +76,7 @@
       </div>
 
       <div class="right-col">
-        <!-- Counter -->
+        <!-- 实时计数 -->
         <div class="card counter-card">
           <div class="live-dot" :class="{ active: isPlaying }"></div>
           <div class="counter-value">{{ currentCount }}</div>
@@ -84,7 +84,7 @@
           <div class="counter-time">{{ isPlaying ? currentTime.toFixed(1) + 's' : '等待播放' }}</div>
         </div>
 
-        <!-- Stats -->
+        <!-- 统计 -->
         <div class="card">
           <div class="card-header"><span class="card-title">统计数据</span></div>
           <div class="stats-col">
@@ -107,7 +107,7 @@
           </div>
         </div>
 
-        <!-- Frame detail -->
+        <!-- 帧明细 -->
         <div class="card">
           <div class="card-header"><span class="card-title">帧级明细</span></div>
           <div v-if="currentFrameData && Object.keys(currentFrameData.category_counts).length" class="frame-detail">
@@ -152,14 +152,14 @@ const CAT_LABELS = {
   pedestrian:"行人", people:"人群",
 };
 
-/* ── Annotated video URL ── */
+/* ── 标注视频 URL ── */
 const annotatedSrc = computed(() => {
   const url = videoData.value?.annotated_video_url;
   if (!url) return null;
   return url.startsWith("http") ? url : "http://localhost:8000" + url;
 });
 
-/* ── Nearest frame data ── */
+/* ── 最近帧数据查找 ── */
 const currentFrameData = computed(() => {
   if (!videoData.value?.frame_data?.length) return null;
   const frames = videoData.value.frame_data;
@@ -169,14 +169,14 @@ const currentFrameData = computed(() => {
   return best;
 });
 
-/* ── Video playback sync ── */
+/* ── 视频播放同步 ── */
 const onTick = () => {
   if (!player.value || !currentFrameData.value) return;
   currentTime.value = player.value.currentTime;
   currentCount.value = currentFrameData.value.total_objects;
 };
 
-/* ── ECharts ── */
+/* ── ECharts 折线图配置 ── */
 const lineOption = computed(() => {
   if (!videoData.value?.frame_data?.length) return null;
   const frames = videoData.value.frame_data;
@@ -206,7 +206,7 @@ const lineOption = computed(() => {
   };
 });
 
-/* ── File handling ── */
+/* ── 文件选择与上传 ── */
 const handleDrop = (e) => { const f = e.dataTransfer.files[0]; if (f) selectFile(f); };
 const handleVideo = (e) => { const f = e.target.files[0]; if (f) selectFile(f); e.target.value = ""; };
 const selectFile = (f) => { if (!f.type.startsWith("video/")) { ElMessage.warning("请上传视频文件"); return; } selectedFile.value = f; };
@@ -247,7 +247,7 @@ const reupload = () => {
 .page-title { font-size: 20px; font-weight: 600; }
 .page-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
-/* Upload */
+/* ===== 上传区域 ===== */
 .upload-block { background: #fff; border-radius: 10px; box-shadow: var(--card-shadow); padding: 0; }
 .upload-inner { padding: 40px; text-align: center; border: 2px dashed #d1d5db; border-radius: 10px; transition: all .2s; }
 .upload-inner:hover { border-color: var(--primary); background: var(--primary-bg); }
@@ -259,7 +259,7 @@ const reupload = () => {
 .ctrl-hint { font-size: 11px; color: var(--text-muted); }
 .file-ready { margin-top: 16px; display: flex; align-items: center; justify-content: center; font-size: 13px; gap: 4px; }
 
-/* Layout */
+/* ===== 布局 ===== */
 .analysis-layout { display: flex; gap: 20px; }
 .left-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .right-col { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -269,20 +269,20 @@ const reupload = () => {
 .card-title { font-size: 14px; font-weight: 600; }
 .badges { display: flex; gap: 6px; }
 
-/* Player */
+/* ===== 播放器 ===== */
 .player-wrapper { background: #000; border-radius: 8px; overflow: hidden; }
 .video-el { width: 100%; display: block; }
 .no-video { text-align: center; color: #6b7280; padding: 48px; }
 .no-video p { margin-top: 12px; font-size: 13px; }
 .player-actions { margin-top: 10px; text-align: right; }
 
-/* Chart */
+/* ===== 图表 ===== */
 .chart-card { flex: 1; }
 .chart-wrapper { height: 260px; }
 .line-chart { width: 100%; height: 100%; }
 .empty-chart { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 13px; }
 
-/* Counter */
+/* ===== 实时计数 ===== */
 .counter-card { text-align: center; padding: 24px; position: relative; }
 .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; position: absolute; top: 16px; right: 16px; }
 .live-dot.active { background: var(--danger); animation: pulse 1.5s infinite; }
@@ -291,13 +291,13 @@ const reupload = () => {
 .counter-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 .counter-time { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
-/* Stats */
+/* ===== 统计 ===== */
 .stats-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mini-stat { text-align: center; background: #f9fafb; border-radius: 8px; padding: 12px 4px; }
 .mini-num { font-size: 24px; font-weight: 700; }
 .mini-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-/* Frame detail */
+/* ===== 帧明细 ===== */
 .frame-detail { display: flex; flex-direction: column; gap: 6px; }
 .fd-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; }
 .fd-name { color: var(--text-secondary); }

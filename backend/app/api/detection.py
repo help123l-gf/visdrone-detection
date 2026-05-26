@@ -112,10 +112,24 @@ async def detect_single_image(file: UploadFile = File(...), model_name: str = Fo
 @router.post("/batch", response_model=BatchDetectionResponse)
 async def detect_batch_images(files: list[UploadFile] = File(...), model_name: str = Form("visdrone-v1")):
     try:
+        import zipfile, tempfile, shutil
         paths = []
         for file in files:
             fname = await save_upload_file(file, settings.UPLOAD_DIR)
-            paths.append(os.path.join(settings.UPLOAD_DIR, fname))
+            fpath = os.path.join(settings.UPLOAD_DIR, fname)
+            # ZIP 压缩包：解压后提取图片
+            if fname.lower().endswith(".zip"):
+                extract_dir = os.path.join(settings.UPLOAD_DIR, f"zip_{os.path.splitext(fname)[0]}")
+                os.makedirs(extract_dir, exist_ok=True)
+                with zipfile.ZipFile(fpath, "r") as zf:
+                    for member in zf.namelist():
+                        if member.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp")):
+                            zf.extract(member, extract_dir)
+                            paths.append(os.path.join(extract_dir, member))
+                if not paths:
+                    raise ValueError("ZIP 文件中未找到图片文件")
+            else:
+                paths.append(fpath)
         data = detection_service.detect_batch_images(paths, model_name)
         _save_record("batch", model_name, data["total_objects"], data["total_time"], [])
         return BatchDetectionResponse(success=True, message=f"批量检测完成", data=BatchDetectionData(**data))

@@ -129,6 +129,9 @@ class DetectionService:
         detection_time = time.time() - start_time
         image_filename = os.path.basename(image_path)
 
+        # 计算聚类与拥堵评级
+        clustering_data, congestion_data = self.compute_clustering(boxes)
+
         return DetectionResult(
             detection_id=detection_id,
             image_url=get_file_url(image_filename, "static/uploads"),
@@ -137,7 +140,9 @@ class DetectionService:
             total_objects=len(boxes),
             detection_time=round(detection_time, 3),
             model_name=model_name,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            clustering=clustering_data,
+            congestion=congestion_data,
         )
 
 
@@ -152,7 +157,7 @@ class DetectionService:
         peak_count = 0
 
         for i, path in enumerate(image_paths):
-            r = self.detect_single_image(path, model_name)
+            r = self.detect_single_image(path, model_name) # 复用单图函数
             filename = os.path.basename(path)
             results.append(BatchImageResult(
                 filename=filename,
@@ -168,11 +173,7 @@ class DetectionService:
 
             if r.total_objects > peak_count:
                 peak_count = r.total_objects
-                level = "道路畅通"
-                if peak_count > 20:
-                    level = "严重拥堵"
-                elif peak_count >= 10:
-                    level = "交通缓行"
+                level = r.congestion.label if r.congestion else "道路畅通"
                 peak = PeakImage(filename=filename, total_objects=peak_count, congestion_level=level)
 
         total_objects = sum(category_counts.values())
@@ -309,6 +310,108 @@ class DetectionService:
             "peak_frame": peak,
             "avg_objects_per_frame": round(avg_objects, 1),
         }
+
+    @staticmethod
+    def compute_clustering(boxes, image_w: int = 0, image_h: int = 0):
+        """车距聚类 + 线性排列过滤 → 拥堵评级（从 DetectionPage.vue 迁移到后端）"""
+        from app.models.schemas import ClusteringData, CongestionInfo
+
+        n = len(boxes)
+        if n < 2:
+            return (
+                ClusteringData(ratio=0, cluster_count=0, traffic_cluster_count=0, avg_spacing=0, label="无数据", level=""),
+                CongestionInfo(level="", label="就绪", emoji="—"),
+            )
+
+        # 提取坐标和宽度
+        def _val(b, attr):
+            return b[attr] if isinstance(b, dict) else getattr(b, attr)
+        widths = [max(_val(b, "x2") - _val(b, "x1"), 1) for b in boxes]
+        cx = [(_val(b, "x1") + _val(b, "x2")) / 2 for b in boxes]
+        cy = [(_val(b, "y1") + _val(b, "y2")) / 2 for b in boxes]
+
+        # 1. 最近邻车距（成对车宽归一化）
+        nn_dists = []
+        for i in range(n):
+            min_d = float("inf")
+            for j in range(n):
+                if i == j: continue
+                d = ((cx[i] - cx[j]) ** 2 + (cy[i] - cy[j]) ** 2) ** 0.5
+                ref = (widths[i] + widths[j]) / 2
+                norm = d / ref
+                if norm < min_d:
+                    min_d = norm
+            nn_dists.append(min_d)
+
+        # 2. BFS 建聚类（阈值 2.5 车宽）
+        CLUSTER_THRESHOLD = 2.5
+        visited = [False] * n
+        clusters = []
+
+        for i in range(n):
+            if visited[i]: continue
+            queue = [i]
+            visited[i] = True
+            members = []
+            while queue:
+                cur = queue.pop(0)
+                members.append(cur)
+                for j in range(n):
+                    if visited[j]: continue
+                    pd = ((cx[cur] - cx[j]) ** 2 + (cy[cur] - cy[j]) ** 2) ** 0.5
+                    ref = (widths[cur] + widths[j]) / 2
+                    if pd / ref < CLUSTER_THRESHOLD:
+                        visited[j] = True
+                        queue.append(j)
+            if len(members) >= 3:
+                clusters.append(members)
+
+        # 3. PCA 过滤线性聚类（λ1/λ2 > 4 → 疑似停车线）
+        traffic_clusters = []
+        for members in clusters:
+            if len(members) < 5:
+                traffic_clusters.append(members)
+                continue
+
+            xs = [cx[k] for k in members]
+            ys = [cy[k] for k in members]
+            mx = sum(xs) / len(xs)
+            my = sum(ys) / len(ys)
+
+            cov_xx = sum((x - mx) ** 2 for x in xs) / len(xs)
+            cov_yy = sum((y - my) ** 2 for y in ys) / len(ys)
+            cov_xy = sum((xs[k] - mx) * (ys[k] - my) for k in range(len(xs))) / len(xs)
+
+            trace = cov_xx + cov_yy
+            det = cov_xx * cov_yy - cov_xy * cov_xy
+            disc = (max(trace * trace - 4 * det, 0)) ** 0.5
+            lam1 = (trace + disc) / 2
+            lam2 = (trace - disc) / 2
+            elongation = lam1 / lam2 if lam2 > 1e-6 else 999
+
+            if elongation > 4:
+                continue  # 线性 → 路边停车
+            traffic_clusters.append(members)
+
+        # 4. 计算交通聚类率
+        traffic_vehicles = sum(len(m) for m in traffic_clusters)
+        ratio = traffic_vehicles / n
+        avg_spacing = sum(nn_dists) / len(nn_dists)
+
+        if ratio >= 0.75:
+            cl = ClusteringData(ratio=ratio, cluster_count=len(clusters), traffic_cluster_count=len(traffic_clusters), avg_spacing=round(avg_spacing, 1), label="密集聚集", level="dense")
+            cg = CongestionInfo(level="congested", label="严重拥堵", emoji="🚨")
+        elif ratio >= 0.45:
+            cl = ClusteringData(ratio=ratio, cluster_count=len(clusters), traffic_cluster_count=len(traffic_clusters), avg_spacing=round(avg_spacing, 1), label="局部聚集", level="moderate")
+            cg = CongestionInfo(level="slow", label="交通缓行", emoji="⚠️")
+        elif n > 0:
+            cl = ClusteringData(ratio=ratio, cluster_count=len(clusters), traffic_cluster_count=len(traffic_clusters), avg_spacing=round(avg_spacing, 1), label="均匀分散", level="sparse")
+            cg = CongestionInfo(level="clear", label="道路畅通", emoji="✅")
+        else:
+            cl = ClusteringData(ratio=0, cluster_count=0, traffic_cluster_count=0, avg_spacing=0, label="无数据", level="")
+            cg = CongestionInfo(level="", label="无车辆", emoji="🔘")
+
+        return cl, cg
 
     @staticmethod
     def _new_uuid() -> str:

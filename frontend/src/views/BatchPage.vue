@@ -5,7 +5,7 @@
       <p class="page-desc">批量处理多张航拍图片，生成巡航分析报告</p>
     </div>
 
-    <!-- Upload & control -->
+    <!-- 上传与控制 -->
     <div class="card batch-upload-card">
       <div
         class="batch-upload-area"
@@ -17,7 +17,7 @@
         <input
           ref="batchInput"
           type="file"
-          accept="image/*"
+          accept="image/*,.zip"
           multiple
           class="file-hidden"
           @change="handleFiles"
@@ -25,7 +25,7 @@
         <template v-if="files.length === 0">
           <el-icon :size="44"><FolderOpened /></el-icon>
           <p class="batch-text">拖拽多张图片到此处，或点击选择</p>
-          <p class="batch-hint">支持同时选择多张 JPG/PNG</p>
+          <p class="batch-hint">支持多张 JPG/PNG，或上传 .zip 压缩包</p>
           <el-button type="primary" size="default" @click.stop="$refs.batchInput.click()">
             <el-icon><Plus /></el-icon>选择文件
           </el-button>
@@ -48,7 +48,7 @@
       </div>
     </div>
 
-    <!-- Progress (shown during processing) -->
+    <!-- 处理进度 -->
     <div v-if="processing" class="card">
       <div class="card-header">
         <span class="card-title">处理进度</span>
@@ -57,11 +57,11 @@
       <el-progress :percentage="100" :indeterminate="true" :stroke-width="14" />
     </div>
 
-    <!-- Report section (shown after processing) -->
+    <!-- 巡航分析报告 -->
     <div v-if="batchData" class="report-section">
       <h2 class="section-title">巡航分析报告</h2>
 
-      <!-- Top stats -->
+      <!-- 顶部统计 -->
       <div class="report-stats-row">
         <div class="report-stat">
           <div class="rs-num">{{ batchData.total_images }}</div>
@@ -82,7 +82,7 @@
       </div>
 
       <div class="report-grid">
-        <!-- Pie chart: category distribution -->
+        <!-- ECharts 饼图：类别分布 -->
         <div class="card">
           <div class="card-header">
             <span class="card-title">目标类别分布</span>
@@ -93,7 +93,7 @@
           </div>
         </div>
 
-        <!-- Peak congestion -->
+        <!-- 峰值拥堵 -->
         <div class="card peak-card">
           <div class="card-header">
             <span class="card-title">车流密度极值</span>
@@ -120,7 +120,7 @@
         </div>
       </div>
 
-      <!-- Image grid -->
+      <!-- 结果图片网格 -->
       <h3 class="section-subtitle">检测结果详情</h3>
       <div class="result-grid">
         <div v-for="(item, i) in batchData.results" :key="i" class="result-card">
@@ -139,7 +139,7 @@
         </div>
       </div>
 
-      <!-- Download -->
+      <!-- 下载区域 -->
       <div class="download-area">
         <el-button type="primary" size="large" @click="downloadReport">
           <el-icon><Download /></el-icon>打包下载检测结果
@@ -148,7 +148,7 @@
       </div>
     </div>
 
-    <!-- Peak image preview dialog -->
+    <!-- 峰值图预览弹窗 -->
     <el-dialog v-model="peakDialog" title="车流密度极值" width="800px">
       <img v-if="peakImageSrc" :src="peakImageSrc" class="peak-preview" />
     </el-dialog>
@@ -164,8 +164,7 @@ import { use } from "echarts/core";
 import { PieChart, BarChart } from "echarts/charts";
 import { TitleComponent, TooltipComponent, LegendComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import { downloadResults } from "../api/detection";
-import request from "../utils/request";
+import { downloadResults, detectBatch } from "../api/detection";
 
 use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -176,7 +175,7 @@ const batchData = ref(null);
 const dragging = ref(false);
 const peakDialog = ref(false);
 
-/* ── Pie chart option ── */
+/* ── ECharts 环形饼图配置 ── */
 const pieOption = computed(() => {
   if (!batchData.value?.category_distribution?.length) return null;
   const items = batchData.value.category_distribution;
@@ -205,7 +204,7 @@ const pieOption = computed(() => {
   };
 });
 
-/* ── Peak image URL ── */
+/* ── 峰值拥堵图片 URL ── */
 const peakImageSrc = computed(() => {
   if (!batchData.value?.peak_image) return null;
   const r = batchData.value.results.find(r => r.filename === batchData.value.peak_image.filename);
@@ -221,7 +220,7 @@ const peakTagType = computed(() => {
   return "success";
 });
 
-/* ── File handling ── */
+/* ── 文件选择与上传 ── */
 const handleDrop = (e) => {
   dragging.value = false;
   addFiles(Array.from(e.dataTransfer.files));
@@ -233,9 +232,9 @@ const handleFiles = (e) => {
 };
 
 const addFiles = (newFiles) => {
-  const images = newFiles.filter(f => f.type.startsWith("image/"));
-  if (images.length === 0) { ElMessage.warning("请选择图片文件"); return; }
-  files.value = [...files.value, ...images];
+  const valid = newFiles.filter(f => f.type.startsWith("image/") || f.name.toLowerCase().endsWith(".zip"));
+  if (valid.length === 0) { ElMessage.warning("请选择图片或 ZIP 文件"); return; }
+  files.value = [...files.value, ...valid];
 };
 
 const clearFiles = () => {
@@ -243,7 +242,7 @@ const clearFiles = () => {
   batchData.value = null;
 };
 
-/* ── Batch detection ── */
+/* ── 发起批量检测请求 ── */
 const startBatch = async () => {
   if (files.value.length === 0) return;
 
@@ -257,13 +256,7 @@ const startBatch = async () => {
     }
     fd.append("model_name", "visdrone-v1");
 
-    const res = await request({
-      url: "/detection/batch",
-      method: "post",
-      data: fd,
-      headers: { "Content-Type": "multipart/form-data" },
-      timeout: 300000,
-    });
+    const res = await detectBatch(fd);
 
     if (res.success && res.data) {
       batchData.value = res.data;
@@ -302,7 +295,7 @@ const downloadReport = async () => {
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .card-title { font-size: 14px; font-weight: 600; }
 
-/* Upload */
+/* ===== 上传区域 ===== */
 .batch-upload-card { padding: 0; }
 .batch-upload-area {
   padding: 40px; text-align: center; cursor: pointer;
@@ -316,10 +309,10 @@ const downloadReport = async () => {
 
 .batch-actions { padding: 0 20px 20px; text-align: center; }
 
-/* Progress */
+/* ===== 进度条 ===== */
 .progress-text { font-size: 13px; color: var(--text-secondary); }
 
-/* Report */
+/* ===== 报告区域 ===== */
 .section-title { font-size: 18px; font-weight: 600; margin: 24px 0 16px; }
 .section-subtitle { font-size: 15px; font-weight: 600; margin: 24px 0 12px; }
 
@@ -333,12 +326,12 @@ const downloadReport = async () => {
 
 .report-grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; margin-bottom: 20px; }
 
-/* Chart */
+/* ===== 图表 ===== */
 .chart-wrapper { height: 300px; display: flex; align-items: center; justify-content: center; }
 .pie-chart { width: 100%; height: 100%; }
 .empty-chart { color: var(--text-muted); font-size: 13px; }
 
-/* Peak */
+/* ===== 峰值卡片 ===== */
 .peak-content { display: flex; align-items: center; gap: 16px; }
 .peak-thumb {
   width: 120px; height: 90px; background: #f3f4f6; border-radius: 8px;
@@ -349,7 +342,7 @@ const downloadReport = async () => {
 .peak-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 .peak-file { font-size: 11px; color: var(--text-muted); margin-top: 2px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Result grid */
+/* ===== 结果网格 ===== */
 .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .result-card {
   background: #fff; border-radius: 8px; box-shadow: var(--card-shadow);
@@ -364,7 +357,7 @@ const downloadReport = async () => {
 .rc-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-/* Download */
+/* ===== 下载区域 ===== */
 .download-area { text-align: center; padding: 20px; }
 .download-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
 

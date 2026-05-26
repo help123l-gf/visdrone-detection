@@ -121,7 +121,7 @@ const resetQuery = () => { query.keyword = ""; query.type = ""; query.page = 1; 
 
 const getImageUrl = (url) => {
   if (!url) return "";
-  if (url.startsWith("http")) return url; // MinIO direct URL
+  if (url.startsWith("http")) return url; // MinIO 直链地址
   return "http://localhost:8000/static/results/" + url;
 };
 
