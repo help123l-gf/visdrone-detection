@@ -208,7 +208,7 @@ const startMonitor = async () => {
 
     // 建立 WebSocket 连接
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsUrl = `${protocol}://${window.location.host}/api/detection/ws/monitor?model_name=${monitorModel.value}`;
+    const wsUrl = `${protocol}://${window.location.host}/api/detection/ws/monitor?model_name=${monitorModel.value}&alert_threshold=${alertThreshold.value}`;
     ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
 

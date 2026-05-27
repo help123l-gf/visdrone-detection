@@ -323,11 +323,8 @@ async def delete_record(record_id: str, db: Session = Depends(get_db)):
 
 
 # ── WebSocket Monitor ──
-ALERT_THRESHOLD = 15
-
-
 @router.websocket("/ws/monitor")
-async def monitor_websocket(websocket: WebSocket, model_name: str = "coco"):
+async def monitor_websocket(websocket: WebSocket, model_name: str = "coco", alert_threshold: int = 15):
     await websocket.accept()
     service = detection_service
     model, class_names = service.get_model(model_name)
@@ -371,7 +368,7 @@ async def monitor_websocket(websocket: WebSocket, model_name: str = "coco"):
 
             await websocket.send_json({
                 "success": True, "boxes": boxes, "total_objects": total,
-                "alert": total >= ALERT_THRESHOLD,
+                "alert": total >= alert_threshold,
                 "category_counts": dict(cat_counts),
                 "frame_w": frame.shape[1], "frame_h": frame.shape[0],
             })
