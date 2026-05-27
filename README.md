@@ -1,144 +1,256 @@
-# visdrone-detection
-基于高空/无人机视角的智能交通态势感知与分析系统
+# VisDrone Detection Platform 无人机交通态势感知系统
 
-===============================基础的五个模块==========================================
+基于 YOLO11 无人机航拍视觉的智能交通态势感知系统。支持单图分析、批量归档、视频分析、实时监控四大检测模块，输出拥堵评级、密度分析、历史台账。
 
-模块一：单图分析（瞬时抓拍检测面板）
-设计目标：让单张图片的检测不仅是“画个框”，而是像一份交警的“违章/拥堵评估报告”。
-交互操作：页面提供一个清晰的“拖拽上传”区域或按钮，用户选择一张本地图片后自动开始分析。
-页面布局（左右分栏结构）：
-左侧（视觉区）：展示检测完毕的图片，图片上需要清晰地标出 YOLO 绘制的边界框（Bbox）和类别名称（如 Car, Bus, Pedestrian）。图片支持放大查看。
-右侧（数据仪表盘）：
-分类统计面板：用显眼的数字卡片展示不同类别（轿车、客车、行人等）的数量。
-拥堵评级标签：根据画面中车辆的总数，动态展示一个标签（例如：车辆数>20，显示红色的“严重拥堵”；10-20显示黄色的“交通缓行”；<10显示绿色的“道路畅通”）。
+**演示环境默认账号：admin / admin123**
 
-模块二：批量归档（多图/巡航报告大屏）
-设计目标：处理大量图片时，重点展示宏观数据的汇总，弱化单张图片，呈现“数据大屏”的感觉。
-交互操作：支持多选图片或直接上传一个 ZIP 压缩包。点击“开始批量处理”后，页面必须有一个动态进度条（如：已处理 45/100 张）。
-页面布局（上下结构：处理区 + 报告区）：
-处理完成后弹出的“巡航分析报告”：
-宏观图表：引入 ECharts，展示一个饼图（各类交通工具的总体占比）。
-极值展示：页面上挑出“车流最密集（拥堵最严重）”的那一张图片作为缩略图展示，旁边标注“峰值车辆数”。
-结果下载：提供一个醒目的按钮“打包下载检测结果”，允许用户把画好框的图片打包下回本地
+---
 
-模块三：视频分析（录像事后复盘监控）
-设计目标：将原本静态的模型展示转化为动态的“态势感知”，让数据跟着画面动起来。
-交互操作：上传一段无人机视角的 MP4 视频。
-页面布局（播放器 + 动态图表）：
-核心播放区：一个类似监控画面的播放器，直接播放带有检测框的视频流。
-侧边动态数据区：
-实时计数器：跟随着视频画面的播放，数字实时跳动，显示当前帧画面内的车辆数。
-动态折线图（强烈建议）：引入一个随时间向左推进的动态折线图，横轴是视频播放的时间，纵轴是车辆数。随着视频播放，折线图实时绘制出整条路段流量的变化趋势
+## 快速开始
 
-模块四：实时监控（摄像头感知中心）
-设计目标：模拟真实的交通路口监控室，突出“实时性”和“告警”功能。
-交互操作：页面上有一个像开关一样的“启动监控 / 关闭监控”按钮。点击后调用本机摄像头。
-页面布局（沉浸式监控台）：
-大画面展示：居中展示本地摄像头拍到的实时画面（带检测框）。
-异常状态告警栏：在画面下方或顶部设置一个信息滚动条或告警灯。一旦画面中的目标数量瞬间飙升（超过设定阈值），告警栏变为红色并闪烁：“⚠️ 警告：当前监控区域出现异常拥堵”。
-实时流量跑马灯：用文字滚动或简单的指标卡，实时刷新当前检测到的目标数
+```bash
+# 1. 启动基础服务（需要 Docker Desktop）
+docker-compose up -d
 
-模块五：系统管理（登录与历史台账）
-设计目标：让整个实践看起来是一个完整的“系统软件”，而不是一个简单的算法 Demo。
-登录页：一个干净的登录界面，包含系统名称（如“无人机智能交通态势感知系统”）、账号、密码输入框和登录按钮。
-历史台账页（数据表格）：
-用一个标准的 Admin 数据表格（Table）展示历史检测记录。
-列名包括：检测时间、检测类型（单图/批量/视频/监控）、检测到的最大目标数、当时判定的拥堵评级。
-顶部检索区：提供简单的筛选功能，比如可以通过下拉菜单筛选“只看批量检测记录”，或者通过日期选择器查看某一天的记录。
-目标库：显示出系统目前能检测出的东西
+# 2. 启动后端（Python 3.10+）
+cd backend
+pip install -r requirements.txt    # 首次
+python main.py                      # http://localhost:8000
 
+# 3. 启动前端（Node 18+）
+cd frontend
+npm install                         # 首次
+npm run dev                         # http://localhost:5173
+```
 
-====================================PostgreSQL — 命令行直连===========================
+浏览器打开 `http://localhost:5173`，登录后使用。
 
-  进数据库
+### GPU 推理（可选）
 
-  docker exec -it visdrone-postgres psql -U visdrone_user -d visdrone_db
+```bash
+cd backend
+uv pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
 
-  进去后提示符变成 visdrone_db=#。
+---
 
-  看一眼有什么
+## 技术栈
 
-  -- 有哪些表
-  \dt
+| 层 | 技术 |
+|---|------|
+| 前端 | Vue 3 + Vite + Element Plus + ECharts |
+| 后端 | FastAPI + Uvicorn |
+| 目标检测 | Ultralytics YOLO11（双模型） |
+| 数据库 | PostgreSQL 15 |
+| 缓存 | Redis 7 |
+| 对象存储 | MinIO（S3 兼容） |
+| 视频处理 | OpenCV + imageio-ffmpeg |
+| 实时通信 | WebSocket |
+| 认证 | JWT + bcrypt |
 
-  -- users 表结构（列名、类型）
-  \d users
+---
 
-  -- 所有用户
-  SELECT * FROM users;
+## 五个功能模块
 
-  -- 只看用户名和角色
-  SELECT username, email, role FROM users;
+### 模块一：单图分析
 
-  查检测记录
+上传无人机航拍图片，YOLO 检测 10 类 VisDrone 目标，输出交通态势评估报告。
 
-  -- 最近 10 条记录
-  SELECT type, model_name, total_objects, created_at FROM detection_records ORDER BY created_at DESC LIMIT 10;
+- **拥堵评级**：车距聚类算法（成对车宽归一化 + PCA 线性停车线过滤），自动判别「道路畅通 / 交通缓行 / 严重拥堵」
+- **车辆分布特征**：聚类率进度条、聚类数量、平均车距
+- **车辆类型分布**：8 类车辆水平条形图
+- **车辆规模构成**：小型 / 中型 / 大型目标按 bbox 面积三分
+- **目标明细**：按类别聚合的统计表格
 
-  -- 只要单图检测的
-  SELECT type, total_objects, created_at FROM detection_records WHERE type = 'single';
+### 模块二：批量归档
 
-  -- 今天有多少条
-  SELECT COUNT(*) FROM detection_records WHERE created_at > CURRENT_DATE;
+多图批量检测 + ZIP 上传，生成巡航分析报告。
 
-  -- 总共检测了多少目标
-  SELECT SUM(total_objects) FROM detection_records;
+- 支持多选图片或上传 .zip 压缩包
+- ECharts 环形饼图展示目标类别分布占比
+- 峰值拥堵图片高亮 + 结果网格浏览
+- 一键打包下载标注结果（ZIP）
 
-  查某张图的框
+### 模块三：视频分析
 
-  -- 先找到记录 ID
-  SELECT id, type, total_objects FROM detection_records ORDER BY created_at DESC LIMIT 1;
+上传无人机航拍视频，逐帧检测并生成标注视频。
 
-  -- 用那个 ID 查框
-  SELECT class_name, COUNT(*) AS 数量, AVG(confidence) AS 平均置信度 FROM detection_results WHERE record_id = '粘贴ID'
-  GROUP BY class_name;
+- YOLO 逐帧推理 → imageio H.264 编码标注视频
+- ECharts 动态折线图（时间 × 目标数）带各类别堆叠面积图
+- 视频播放同步：当前帧目标数 + 帧级类别明细
+- 峰值 / 均值 / 已处理帧统计
 
-  退出
+### 模块四：实时监控
 
-  \q
+调用本地摄像头 + WebSocket 实时推流检测。
 
-  ---
-  ===================================MinIO — 有 Web 控制台==========================
+- 每 120ms 抓一帧 JPEG → WebSocket 发后端 → YOLO 推理 → 返回框坐标
+- Canvas 实时画框（requestAnimationFrame）
+- 可调阈值告警栏：目标数超阈值时红色闪烁
+- 告警记录滚动日志 + 实时指标（FPS / 累计检测 / 告警次数）
+- 双模型切换：COCO（近景摄像头演示）/ VisDrone（航拍）
 
-  浏览器打开：
+### 模块五：系统管理
 
-  http://localhost:9001
+- **登录 / 注册 / 忘记密码**：JWT 认证 + bcrypt 密码哈希
+- **历史台账**：数据表格分页展示，支持按类型 / 日期筛选，详情弹窗查看标注图 + 目标列表
+- **目标分类库**：VisDrone 10 类目标卡片展示
+- **个人中心**：用户信息 + 真实检测统计（总次数 / 累计目标 / 成功率 / 使用天数）
 
-  登录：
+---
 
-  ┌──────────┬────────────┐
-  │   字段   │     值     │
-  ├──────────┼────────────┤
-  │ Username │ minioadmin │
-  ├──────────┼────────────┤
-  │ Password │ minioadmin │
-  └──────────┴────────────┘
+## 项目结构
 
-  进去就能看到 visdrone-bucket 桶，里面存着上传的图片和检测结果。
+```
+visdrone-detection/
+├── docker-compose.yml              # PostgreSQL + Redis + MinIO
+├── storage/
+│   ├── postgres/init/init_db.sql   # 数据库建表 + 初始数据
+│   ├── redis/data/                 # Redis 持久化
+│   └── minio/data/                 # MinIO 存储
+│
+├── backend/
+│   ├── main.py                     # FastAPI 入口
+│   ├── .env                        # 环境变量配置
+│   ├── yolo11m_visdrone.pt         # VisDrone 微调模型 (39MB, 10类)
+│   ├── yolo11n.pt                  # COCO 预训练模型 (5.4MB, 80类)
+│   ├── static/
+│   │   ├── uploads/                # 上传原图
+│   │   └── results/                # 标注图 + 标注视频
+│   └── app/
+│       ├── config.py               # 配置加载
+│       ├── database.py             # SQLAlchemy 数据库
+│       ├── redis_client.py         # Redis 客户端
+│       ├── api/
+│       │   ├── detection.py        # 检测路由 (单图/批量/视频/WS/历史/下载)
+│       │   └── auth.py             # 认证路由 (登录/注册/重置/统计)
+│       ├── services/
+│       │   ├── detection_service.py    # YOLO 双模型 + 聚类算法
+│       │   ├── auth_service.py         # 密码 + JWT
+│       │   └── storage_service.py      # MinIO 上传/删除
+│       ├── models/
+│       │   ├── schemas.py          # Pydantic 请求/响应模型
+│       │   └── db_models.py        # SQLAlchemy ORM
+│       └── utils/
+│           ├── file_utils.py       # 文件保存
+│           └── security.py         # JWT + bcrypt
+│
+└── frontend/
+    ├── vite.config.js              # Vite 配置 + /api 代理
+    └── src/
+        ├── main.js                 # Vue 入口
+        ├── App.vue
+        ├── style.css               # 全局主题
+        ├── router/index.js         # 路由
+        ├── utils/request.js        # Axios 封装
+        ├── api/detection.js        # 所有 API 函数
+        ├── layouts/MainLayout.vue  # 主布局（暗色侧边栏）
+        ├── components/
+        │   ├── Sidebar.vue         # 导航
+        │   ├── Header.vue          # 顶栏
+        │   └── SliderCompare.vue   # 滑块对比
+        └── views/
+            ├── LoginPage.vue
+            ├── RegisterPage.vue
+            ├── ForgotPasswordPage.vue
+            ├── DetectionPage.vue   # 模块一
+            ├── BatchPage.vue       # 模块二
+            ├── VideoPage.vue       # 模块三
+            ├── MonitorPage.vue     # 模块四
+            ├── HistoryPage.vue     # 模块五
+            ├── TargetsPage.vue
+            └── ProfilePage.vue
+```
 
-  ---
-  快速看一眼数据的简便方式
+---
 
-  不用装任何工具，直接用浏览器调后端 API：
+## API 速查
 
-  http://localhost:8000/api/detection/history
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/auth/login` | 登录 → JWT |
+| POST | `/api/auth/register` | 注册 |
+| POST | `/api/auth/reset-password` | 重置密码 |
+| GET | `/api/auth/me` | 当前用户 |
+| GET | `/api/auth/stats` | 用户检测统计 |
+| POST | `/api/detection/single` | 单图检测 |
+| POST | `/api/detection/batch` | 批量检测 |
+| POST | `/api/detection/video` | 视频分析 |
+| WS | `/api/detection/ws/monitor` | 实时监控 |
+| GET | `/api/detection/history` | 历史记录 |
+| GET | `/api/detection/detail/{id}` | 检测详情 |
+| DELETE | `/api/detection/delete/{id}` | 删除记录 |
+| GET | `/api/detection/download` | 下载结果 ZIP |
+| GET | `/api/detection/targets/list` | 目标类别 |
 
-  前提是 docker-compose up -d 跑着，然后登录后检测几张图，历史台账就有真数据了。
+---
 
-    默认账号
+## 双模型
 
-  ┌────────┬──────────┐
-  │  字段  │    值    │
-  ├────────┼──────────┤
-  │ 用户名 │ admin    │
-  ├────────┼──────────┤
-  │ 密码   │ admin123 │
-  ├────────┼──────────┤
-  │ 角色   │ admin    │
-  └────────┴──────────┘
+| 模型 | 文件 | 类别数 | 用途 |
+|------|------|--------|------|
+| visdrone-v1 | yolo11m_visdrone.pt | 10（行人/汽车/卡车等） | 无人机航拍 |
+| coco | yolo11n.pt | 80（人/车/日用品等） | 摄像头近景演示 |
 
+WebSocket 监控默认用 COCO，其余模块用 VisDrone。启动时两个模型同时加载到 GPU。
 
-  要想批量/视频详情也能看图，需要这些模块检测时把每张图的 key
-  存进数据库——目前只有单图做了这件事，另外几个可以后续补
+---
 
-  项目路径管理。
+## 拥堵评级算法
+
+1. **成对车宽归一化**：车 A 与车 B 的像素距离 ÷ 两车平均宽度 → 消除近大远小的透视形变
+2. **BFS 聚类**：间距 < 2.5 车宽视为同一聚类
+3. **PCA 线性过滤**：协方差矩阵特征值比 > 4 → 线性排列 → 疑似路边停车 → 排除
+4. **交通聚类率**：属于团状聚类的车辆 ÷ 总车辆
+5. **评级**：聚类率 ≥ 75% → 拥堵，≥ 45% → 缓行，< 45% → 畅通
+
+算法位于 `backend/app/services/detection_service.py` 的 `compute_clustering()` 方法，单图和批量共用。
+
+---
+
+## 数据库
+
+| 表 | 说明 |
+|----|------|
+| users | 用户（用户名/邮箱/密码哈希/角色） |
+| detection_records | 检测记录（类型/模型/目标数/耗时/文件key/时间） |
+| detection_results | 每框结果（x1,y1,x2,y2/置信度/类别ID/类别名） |
+| target_categories | VisDrone 10 类目标（中英文名/描述/颜色） |
+
+```bash
+# 直连数据库
+docker exec -it visdrone-postgres psql -U visdrone_user -d visdrone_db
+# 查看所有表
+\dt
+# 查最近 10 条记录
+SELECT type, model_name, total_objects, created_at FROM detection_records ORDER BY created_at DESC LIMIT 10;
+```
+
+MinIO 控制台：`http://localhost:9001`（minioadmin / minioadmin）
+
+Redis 验证：`docker exec visdrone-redis redis-cli KEYS "visdrone:*"`
+
+---
+
+## 开发说明
+
+### 数据流追踪
+
+```
+用户操作 → frontend/src/views/XxxPage.vue
+         → import X from "../api/detection.js"   ← 找到 API 调用
+         → request({ url: "/detection/xxx" })    ← 对应的路由
+         → backend/app/api/detection.py          ← 路由处理函数
+         → services/detection_service.py         ← YOLO 推理
+         → PostgreSQL / MinIO / Redis            ← 数据持久化
+```
+
+### 环境变量
+
+所有配置在 `backend/.env`，包括数据库连接、模型路径、MinIO 地址等。修改后重启后端生效。
+
+### 代码规范
+
+- Python：`app/api/` 只接收请求和返回响应，`app/services/` 放业务逻辑
+- Vue：每个页面通过 `api/detection.js` 发请求，不直接 import `request`
+- 注释：全部中文注释
