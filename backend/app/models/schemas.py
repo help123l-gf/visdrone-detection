@@ -77,6 +77,7 @@ class TargetListResponse(BaseModel):
 
 
 class BatchImageResult(BaseModel):
+    record_id: Optional[str] = None
     filename: str
     image_url: str
     result_image_url: str

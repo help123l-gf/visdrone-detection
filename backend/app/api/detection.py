@@ -34,14 +34,14 @@ def _save_record(
         print(f"DB save skipped ({detect_type}): {e}")
 
 
-def _save_record_inner(detect_type, model_name, total_objects, detection_time, boxes, orig_key, result_key, user_id):
+def _save_record_inner(detect_type, model_name, total_objects, detection_time, boxes, orig_key="", result_key="", user_id=None, record_id=None):
     if user_id is None:
         user_id = _guest_user_id()
     if not user_id:
         return
     db = SessionLocal()
     try:
-        rid = detection_service._new_uuid()
+        rid = record_id or detection_service._new_uuid()
         cols = "id, user_id, type, model_name, total_objects, detection_time, original_image_key, result_image_key, status"
         db.execute(
             text(f"INSERT INTO detection_records ({cols}) VALUES (:id,:uid,:t,:mn,:to,:dt,:ok,:rk,:s)"),
@@ -131,6 +131,20 @@ async def detect_batch_images(files: list[UploadFile] = File(...), model_name: s
             else:
                 paths.append(fpath)
         data = detection_service.detect_batch_images(paths, model_name)
+        # 每张图存一条 single 记录，收集 ID 供下载
+        batch_record_ids = []
+        for r in data.get("results", []):
+            rid = detection_service._new_uuid()
+            batch_record_ids.append(rid)
+            r.record_id = rid
+            try:
+                _save_record_inner("single", model_name, r.total_objects, r.detection_time,
+                                   _boxes_to_rows(r.boxes), orig_key=r.filename,
+                                   result_key=os.path.basename(r.result_image_url),
+                                   record_id=rid)
+            except Exception as e:
+                print(f"Batch single save failed: {e}")
+        # 另存一条 batch 汇总记录
         _save_record("batch", model_name, data["total_objects"], data["total_time"], [])
         return BatchDetectionResponse(success=True, message=f"批量检测完成", data=BatchDetectionData(**data))
     except Exception as e:
@@ -204,13 +218,13 @@ async def download_results(record_ids: str = "", db: Session = Depends(get_db)):
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         seen = set()
         for i, rec in enumerate(records):
-            for key_type, key in [("result", rec["result"]), ("original", rec["original"])]:
-                if not key or key in seen:
-                    continue
-                seen.add(key)
-                fpath = os.path.join(settings.RESULT_DIR if key_type == "result" else settings.UPLOAD_DIR, key)
-                if os.path.exists(fpath):
-                    zf.write(fpath, f"{i+1:03d}_{key_type}_{os.path.basename(key)}")
+            key = rec["result"]
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            fpath = os.path.join(settings.RESULT_DIR, key)
+            if os.path.exists(fpath):
+                zf.write(fpath, f"{i+1:03d}_{os.path.basename(key)}")
     buf.seek(0)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buf, media_type="application/zip", headers={"Content-Disposition": "attachment; filename=detection_results.zip"})

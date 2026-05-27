@@ -275,7 +275,8 @@ const previewPeakImage = () => { peakDialog.value = true; };
 
 const downloadReport = async () => {
   try {
-    const blob = await downloadResults("");
+    const ids = batchData.value.results?.map(r => r.record_id).filter(Boolean).join(",") || "";
+    const blob = await downloadResults(ids);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = "detection_results.zip"; a.click();

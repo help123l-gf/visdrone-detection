@@ -50,39 +50,52 @@
 
 ====================================PostgreSQL — 命令行直连===========================
 
-  Docker 跑起来后：
+  进数据库
 
   docker exec -it visdrone-postgres psql -U visdrone_user -d visdrone_db
 
-  进去后可以查：
+  进去后提示符变成 visdrone_db=#。
 
-  -- 看所有表
+  看一眼有什么
+
+  -- 有哪些表
   \dt
 
-  -- 看用户
-  SELECT username, email, role, created_at FROM users;
+  -- users 表结构（列名、类型）
+  \d users
 
-  -- 看检测记录
-  SELECT type, model_name, total_objects, created_at FROM detection_records ORDER BY created_at DESC;
+  -- 所有用户
+  SELECT * FROM users;
 
-  -- 看检测结果的框
-  SELECT class_name, COUNT(*) FROM detection_results GROUP BY class_name;
+  -- 只看用户名和角色
+  SELECT username, email, role FROM users;
 
-  如果装了 DBeaver 或 Navicat，连接参数：
+  查检测记录
 
-  ┌──────────┬───────────────────┐
-  │   参数   │        值         │
-  ├──────────┼───────────────────┤
-  │ Host     │ localhost         │
-  ├──────────┼───────────────────┤
-  │ Port     │ 5432              │
-  ├──────────┼───────────────────┤
-  │ User     │ visdrone_user     │
-  ├──────────┼───────────────────┤
-  │ Password │ visdrone_password │
-  ├──────────┼───────────────────┤
-  │ Database │ visdrone_db       │
-  └──────────┴───────────────────┘
+  -- 最近 10 条记录
+  SELECT type, model_name, total_objects, created_at FROM detection_records ORDER BY created_at DESC LIMIT 10;
+
+  -- 只要单图检测的
+  SELECT type, total_objects, created_at FROM detection_records WHERE type = 'single';
+
+  -- 今天有多少条
+  SELECT COUNT(*) FROM detection_records WHERE created_at > CURRENT_DATE;
+
+  -- 总共检测了多少目标
+  SELECT SUM(total_objects) FROM detection_records;
+
+  查某张图的框
+
+  -- 先找到记录 ID
+  SELECT id, type, total_objects FROM detection_records ORDER BY created_at DESC LIMIT 1;
+
+  -- 用那个 ID 查框
+  SELECT class_name, COUNT(*) AS 数量, AVG(confidence) AS 平均置信度 FROM detection_results WHERE record_id = '粘贴ID'
+  GROUP BY class_name;
+
+  退出
+
+  \q
 
   ---
   ===================================MinIO — 有 Web 控制台==========================
